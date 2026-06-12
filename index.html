@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saylani Meat Dept - Vendor ERP</title>
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Supabase Core Engine Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- CLIENT SIDE PDF INJECTORS (jsPDF & AutoTable Plugin) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.6.0/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+
+    <div class="erp-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <i class="fa-solid fa-cow logo-icon"></i>
+                <h2>Saylani ERP</h2>
+            </div>
+            <nav class="nav-links">
+                <a href="#" class="active" onclick="switchTab('dashboard')"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+                <a href="#" onclick="switchTab('vendors')"><i class="fa-solid fa-users"></i> Vendors & Ledger</a>
+                <a href="#" id="pending-nav-link" onclick="switchTab('pending-payments')"><i class="fa-solid fa-clock-rotate-left"></i> Pending Payments</a>
+                <a href="#" onclick="switchTab('gatepass')"><i class="fa-solid fa-ticket"></i> Gate Pass Gen</a>
+                <a href="#" onclick="switchTab('products')"><i class="fa-solid fa-layer-group"></i> Product Rates</a>
+                <a href="#" id="admin-nav" onclick="switchTab('users')"><i class="fa-solid fa-user-shield"></i> User Control</a>
+            </nav>
+            <div class="user-profile">
+                <img src="https://ui-avatars.com/api/?name=Admin+User&background=0D8ABC&color=fff" alt="User">
+                <div class="user-info">
+                    <h4>Arslan (Admin)</h4>
+                    <p>Meat Dept</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="search-bar"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search anything here..."></div>
+                <div class="header-actions">
+                    <button class="btn-primary" onclick="openModal('vendor-modal')"><i class="fa-solid fa-user-plus"></i> Add New Vendor</button>
+                    <button class="btn-primary" onclick="switchTab('gatepass')"><i class="fa-solid fa-plus"></i> New Gate Pass</button>
+                    <button class="logout-btn"><i class="fa-solid fa-right-from-bracket"></i></button>
+                </div>
+            </header>
+
+            <div class="content-body">
+
+                <!-- 1. DASHBOARD VIEW -->
+                <section id="dashboard-tab" class="tab-content active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="card-icon blue"><i class="fa-solid fa-users"></i></div>
+                            <div class="card-data">
+                                <h3 id="dash-active-vendors">0</h3>
+                                <p>Active Vendors</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="card-icon green"><i class="fa-solid fa-wallet"></i></div>
+                            <div class="card-data">
+                                <h3 id="dash-total-deposits">PKR 0</h3>
+                                <p>Total Security Deposits</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="card-icon orange"><i class="fa-solid fa-file-invoice"></i></div>
+                            <div class="card-data">
+                                <h3 id="dash-total-passes">0</h3>
+                                <p>Gate Passes Tracked</p>
+                            </div>
+                        </div>
+                        <div class="stat-card clickable-card" onclick="openPendingTabDirectly()">
+                            <div class="card-icon red"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                            <div class="card-data">
+                                <h3 id="dash-pending-payments">PKR 0</h3>
+                                <p>Pending Payments <i class="fa-solid fa-arrow-right-long"></i></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. VENDORS & LEDGER TAB -->
+                <section id="vendors-tab" class="tab-content">
+                    <div class="tab-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h1>Registered Vendors & 360° Ledger</h1>
+                    </div>
+                    
+                    <div class="card" style="margin-bottom: 25px; overflow-x: auto;">
+                        <table class="erp-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 12px;">Vendor Name</th>
+                                    <th style="padding: 12px;">NIC Number</th>
+                                    <th style="padding: 12px;">Mobile Number</th>
+                                    <th style="padding: 12px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vendors-list-body">
+                                <tr>
+                                    <td colspan="4" style="padding: 20px; text-align: center; color: #94a3b8;">
+                                        <i class="fa-solid fa-spinner fa-spin"></i> Loading live vendors...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="vendor-360-profile" style="display: none; margin-top: 25px;">
+                        <h3 id="profile-vendor-name-title" style="margin-bottom: 15px; color: var(--sidebar-bg);">Vendor Details Profile</h3>
+                        
+                        <div class="vendor-profile-grid">
+                            <!-- Left Profile Side Card with Dynamic Deposit History Table Included -->
+                            <div class="vendor-summary-card" style="display: flex; flex-direction: column; gap: 12px;">
+                                <div class="v-lg-avatar"><i class="fa-solid fa-shop"></i></div>
+                                <h3 id="prof-card-name" style="margin-bottom: 5px; text-align: center;">-</h3>
+                                <p style="color: #64748b; font-size: 13px; margin-bottom: 10px; text-align: center;">Registered Vendor</p>
+                                
+                                <div class="vendor-detail-row"><strong>Reg Date:</strong> <span id="prof-date">-</span></div>
+                                <div class="vendor-detail-row"><strong>NIC Number:</strong> <span id="prof-nic">-</span></div>
+                                <div class="vendor-detail-row"><strong>Mobile:</strong> <span id="prof-mobile">-</span></div>
+                                
+                                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 10px 0;">
+                                
+                                <!-- NEW SECTION: Slips Receipts Details Ledger Box -->
+                                <h4 style="font-size: 13px; color: var(--sidebar-bg); margin-bottom: 5px;"><i class="fa-solid fa-receipt"></i> DN / RV Deposit Slips Ledger</h4>
+                                <div style="max-height: 180px; overflow-y: auto; background: #f8fafc; border-radius: 6px; padding: 5px; border: 1px solid #e2e8f0;">
+                                    <table style="width: 100%; font-size: 12px; border-collapse: collapse; text-align: left;">
+                                        <thead>
+                                            <tr style="border-bottom: 1px solid #cbd5e1; color: #475569;">
+                                                <th style="padding: 4px;">Date</th>
+                                                <th style="padding: 4px;">DN/RV Slip</th>
+                                                <th style="padding: 4px; text-align: right;">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="prof-slips-breakdown-body">
+                                            <!-- Slip rows loaded dynamically -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Right Profile Analytics Side Grid -->
+                            <div style="display: flex; flex-direction: column; gap: 20px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="card" style="background: #ecfdf5; border-left: 5px solid #10b981; padding: 20px;">
+                                        <p style="color: #065f46; font-size: 13px; font-weight: 600; text-transform: uppercase;">Total Security Deposit (Net)</p>
+                                        <h2 id="prof-advance" style="color: #047857; margin: 10px 0;">Rs. 0</h2>
+                                        <button class="btn-primary-sm" style="background: #10b981;" onclick="openAdvanceEditModal()"><i class="fa-solid fa-plus"></i> Deposit New DN/RV</button>
+                                    </div>
+                                    <div class="card" style="background: #f5f3ff; border-left: 5px solid #8b5cf6; padding: 20px;">
+                                        <p style="color: #5b21b6; font-size: 13px; font-weight: 600; text-transform: uppercase;">Total Gross Business Volume</p>
+                                        <h2 id="prof-total-biz" style="color: #6d28d9; margin: 10px 0;">Rs. 0</h2>
+                                        <p style="color: #7c3aed; font-size: 12px;">Cumulated ledger totals</p>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <h3 style="margin-bottom: 15px; font-size: 16px; color: var(--sidebar-bg);"><i class="fa-solid fa-history"></i> Gate Pass Purchase History & Items Detail</h3>
+                                    <div style="overflow-x: auto;">
+                                        <table class="erp-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+                                            <thead>
+                                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                                    <th style="padding: 10px;">Pass Number</th>
+                                                    <th style="padding: 10px;">Date</th>
+                                                    <th style="padding: 10px;">Grand Total</th>
+                                                    <th style="padding: 10px;">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="vendor-purchase-history-body">
+                                                <tr>
+                                                    <td colspan="4" style="padding: 15px; text-align: center; color: #94a3b8; font-size: 14px;">No records found.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. PENDING PAYMENTS SCREEN -->
+                <section id="pending-payments-tab" class="tab-content">
+                    <h2>Pending Payments Control Center</h2>
+                    <p style="color: #64748b; margin-bottom: 20px; font-size: 14px;">Select a vendor to view and settle their unpaid gate passes.</p>
+
+                    <div class="vendors-pending-grid" id="pending-vendors-cards-box">
+                        <!-- Loaded dynamically via database client -->
+                    </div>
+
+                    <div id="vendor-passes-container" class="data-table-container" style="margin-top: 30px; display: none;">
+                        <div class="table-header">
+                            <h3 id="selected-vendor-title">Pending Passes</h3>
+                        </div>
+                        <table class="custom-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Gate Pass #</th>
+                                    <th>Total Amount</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-passes-table-body">
+                                <!-- Pass rows injected on click -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 4. GATE PASS GENERATOR VIEW -->
+                <section id="gatepass-tab" class="tab-content">
+                    <div class="form-container">
+                        <h2><i class="fa-solid fa-receipt" style="color: var(--sidebar-active);"></i> Professional Gate Pass Generator</h2>
+                        <hr style="margin: 15px 0;">
+                        
+                        <form id="gatepass-form" onsubmit="processGatePassEmission(event)">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Select Vendor Name</label>
+                                    <select id="gp-vendor-select" required>
+                                        <option value="">-- Choose Vendor --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Payment Method Mode</label>
+                                    <select id="gp-payment-method" required>
+                                        <option value="Pending">On-Account / Pending Bill</option>
+                                        <option value="Paid">Direct Advance Paid (DN Slip)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="billing-items-header">
+                                <div>Animal Category</div>
+                                <div>Select Item / Part</div>
+                                <div>Rate (PKR)</div>
+                                <div>Quantity</div>
+                                <div>Total Amount</div>
+                                <div>Action</div>
+                            </div>
+                            
+                            <div id="items-container" class="items-selection-box">
+                                <div class="item-row">
+                                    <div>
+                                        <select class="category-select" onchange="loadItemsByCategory(this)" required>
+                                            <option value="">-- Choose --</option>
+                                            <option value="Goat">Goat (بکرا)</option>
+                                            <option value="Cow">Cow (گائے)</option>
+                                            <option value="Camel">Camel (اونٹ)</option>
+                                            <option value="Chicken">Chicken (مرغی)</option>
+                                        </select>
+                                    </div>
+                                    <div><select class="item-select" onchange="updateDefaultPrice(this)" required disabled>
+                                            <option value="">-- Select Item --</option>
+                                        </select></div>
+                                    <div><input type="number" class="item-price-input" oninput="calculateRowTotal(this)" placeholder="0" min="0" required disabled></div>
+                                    <div><input type="number" class="item-qty" oninput="calculateRowTotal(this)" placeholder="Qty" min="1" required disabled></div>
+                                    <div><input type="text" class="item-total" value="0" readonly></div>
+                                    <div><button type="button" class="btn-danger" onclick="removeProductRow(this)"><i class="fa-solid fa-trash"></i></button></div>
+                                </div>
+                            </div>
+                            
+                            <button type="button" class="btn-secondary" onclick="addNewProductRow()" style="margin-top: 15px;"><i class="fa-solid fa-plus"></i> Add Another Item</button>
+                            
+                            <div class="grand-total-section">
+                                <h3>Grand Total Amount: <span id="grand-total-val">Rs. 0</span></h3>
+                            </div>
+                            
+                            <button type="submit" class="btn-primary btn-large" style="background:#059669;"><i class="fa-solid fa-file-pdf"></i> Generate, Save & Download Invoice (PDF)</button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- 5. PRODUCT RATES TAB -->
+                <section id="products-tab" class="tab-content"><h2>Live Stock Base Rates Config</h2></section>
+                <!-- 6. USERS CONTROL TAB -->
+                <section id="users-tab" class="tab-content"><h2>User Management Accounts</h2></section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL POPUPS (Vendor Register) -->
+    <div id="vendor-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Add New Vendor Account</h3><button class="close-modal-btn" onclick="closeModal('vendor-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-vendor-form" onsubmit="registerNewVendor(event)">
+                    <div class="form-group"><label>Vendor Name</label><input type="text" id="v-name" required></div>
+                    <div class="form-group"><label>NIC Number</label><input type="text" id="v-nic" required></div>
+                    <div class="form-group"><label>Mobile Number</label><input type="text" id="v-mobile" required></div>
+                    <div class="form-group"><label>Advance Deposit (PKR)</label><input type="number" id="v-advance" required></div>
+                    <div class="form-group"><label>Saylani Slip Number</label><input type="text" id="v-slip" required></div>
+                    <button type="submit" class="btn-primary btn-large">Save & Register Vendor</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW FORM CONFIGURATION: Security Deposit Slip Updation -->
+    <div id="advance-edit-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Deposit New Security Advance</h3><button class="close-modal-btn" onclick="closeModal('advance-edit-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Vendor Account: <strong id="edit-advance-vendor-name">-</strong></p>
+                <form onsubmit="saveNewAdvanceAmount(event)">
+                    <div class="form-group" style="margin-top:12px;">
+                        <label>DN / RV Slip Number</label>
+                        <input type="text" id="new-advance-slip-input" placeholder="e.g. RV-4412" required>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label>Amount to Deposit (PKR)</label>
+                        <input type="number" id="new-advance-input" placeholder="e.g. 50000" required>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large" style="margin-top: 15px;">Confirm & Log Payment Slip</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settle Gate Pass Payment Modal Box -->
+    <div id="payment-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Settle Gate Pass Payment</h3>
+                <button type="button" class="close-modal-btn" onclick="closeModal('payment-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <p><strong>Gate Pass Reference:</strong> <span id="modal-pass-num"></span></p>
+                    <p><strong>Remaining Outstandings:</strong> <span id="modal-pass-amount" style="color: #ef4444; font-weight: bold;"></span></p>
+                </div>
+                
+                <form onsubmit="executePaymentSettlement(event)">
+                    <div class="form-group">
+                        <label>Enter DN / RV Slip Number</label>
+                        <input type="text" id="modal-dn-input" placeholder="e.g. DN-9941" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Amount Paying Now (PKR)</label>
+                        <input type="number" id="modal-amount-to-pay" placeholder="Enter amount received" required>
+                        <small style="color:#64748b; display: block; margin-top: 4px;">* Agar poori payment aayi hai to ise mat chhedin.</small>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary" style="background:#10b981; width: 100%; padding: 12px; margin-top: 10px;">
+                        <i class="fa-solid fa-floppy-disk"></i> Confirm & Save Payment Record
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
