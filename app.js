@@ -16,8 +16,8 @@ const productsData = {
 };
 
 // Supabase Global Endpoint Initialization
-const LIVE_DB_URL = "https://vffogcexjvodssomuksv.supabase.co"; 
-const LIVE_DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZm9nY2V4anZvZHNzb211a3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTI0NDgsImV4cCI6MjA5NjgyODQ0OH0.aswy1lCG_2hmtThfT6TAp6IJEhJkHxmIaxAlb3UZxJ4"; 
+const LIVE_DB_URL = "https://vffogcexjvodssomuksv.supabase.co";
+const LIVE_DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmZm9nY2V4anZvZHNzb211a3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTI0NDgsImV4cCI6MjA5NjgyODQ0OH0.aswy1lCG_2hmtThfT6TAp6IJEhJkHxmIaxAlb3UZxJ4";
 
 function getSupabaseClient() {
     return (typeof supabase !== 'undefined') ? supabase.createClient(LIVE_DB_URL, LIVE_DB_KEY) : null;
@@ -76,7 +76,7 @@ async function registerNewVendor(event) {
         alert('Vendor Accounts Registry Completed Successfully!');
         document.getElementById('add-vendor-form').reset();
         closeModal('vendor-modal');
-        
+
         loadLiveVendors();
         loadDashboardStats();
     } catch (err) { alert(err.message); }
@@ -114,15 +114,26 @@ async function loadLiveVendors() {
 
 async function fetchAndShowVendorProfile(vendorId) {
     const currentDb = getSupabaseClient();
-    if (!currentDb) return;
+    if (!currentDb) {
+        console.error("Supabase client not initialized");
+        return;
+    }
 
     try {
-        // 1. Fetch Vendor Basic Details First
-        const { data: vendor, error: vError } = await currentDb.from('vendors').select('*').eq('id', vendorId).single();
+        console.log("Loading profile for vendor ID:", vendorId);
+
+        // 1. Vendor Basic Details
+        const { data: vendor, error: vError } = await currentDb
+            .from('vendors')
+            .select('*')
+            .eq('id', vendorId)
+            .single();
+
         if (vError) throw vError;
+
         activeVendorIdForEdit = vendorId;
 
-        // UI Base Elements ko pehle fill karein taake screen khali na dikhe
+        // Basic Info Fill
         document.getElementById('profile-vendor-name-title').innerText = `${vendor.name} - 360° Full Ledger Profile`;
         document.getElementById('prof-card-name').innerText = vendor.name;
         document.getElementById('prof-date').innerText = new Date(vendor.created_at).toLocaleDateString('en-PK');
@@ -130,59 +141,98 @@ async function fetchAndShowVendorProfile(vendorId) {
         document.getElementById('prof-mobile').innerText = vendor.mobile_number;
         document.getElementById('prof-total-biz').innerText = 'Rs. ' + (vendor.total_business || 0).toLocaleString();
 
-        // 2. FETCH ALL SECURITY SLIPS HISTORY (DN/RV Details)
-        const { data: deposits, error: dError } = await currentDb.from('security_deposits').select('*').eq('vendor_id', vendorId).order('created_at', { ascending: false });
-        
-        let totalAdvance = 0;
+        // ==================== SECURITY DEPOSITS (FIXED - No created_at) ====================
+        const { data: deposits, error: dError } = await currentDb
+            .from('security_deposits')
+            .select('*')
+            .eq('vendor_id', vendorId);
+
+        console.log("Deposits fetched:", deposits);
+        console.log("Deposits error:", dError);
+
         const slipsTableBody = document.getElementById('prof-slips-breakdown-body');
         slipsTableBody.innerHTML = "";
+        let totalAdvance = 0;
 
-        if (!dError && deposits && deposits.length > 0) {
+        if (dError) {
+            console.error("Deposits Query Error:", dError);
+            slipsTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:red; padding:15px;">Error: ${dError.message}</td></tr>`;
+        }
+        else if (deposits && deposits.length > 0) {
+            // Sort by id (latest first) since created_at doesn't exist
+            deposits.sort((a, b) => b.id - a.id);
+
             deposits.forEach(d => {
-                const currentAmount = parseFloat(d.amount || 0);
-                totalAdvance += currentAmount; // Har slip ka amount plus ho raha hai
-                
-                let slipDate = new Date(d.created_at).toLocaleDateString('en-PK', { day: '2-digit', month: 'short' });
+                const amount = parseFloat(d.amount || 0);
+                totalAdvance += amount;
+
+                const slipDate = new Date(d.created_at || Date.now()).toLocaleDateString('en-PK', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                });
+
                 slipsTableBody.innerHTML += `
                     <tr style="border-bottom: 1px dashed #e2e8f0;">
-                        <td style="padding: 4px 0; color: #64748b;">${slipDate}</td>
-                        <td style="padding: 4px 0; font-weight: 600; color: #334155;">${d.slip_number || 'N/A'}</td>
-                        <td style="padding: 4px 0; text-align: right; color: #10b981; font-weight: 600;">Rs. ${currentAmount.toLocaleString()}</td>
+                        <td style="padding: 6px 4px; color: #64748b;">${slipDate}</td>
+                        <td style="padding: 6px 4px; font-weight: 600; color: #334155;">${d.slip_number || 'N/A'}</td>
+                        <td style="padding: 6px 4px; text-align: right; color: #10b981; font-weight: 700;">
+                            Rs. ${amount.toLocaleString()}
+                        </td>
                     </tr>`;
             });
         } else {
-            slipsTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#94a3b8; padding:10px;">No deposit slips found.</td></tr>`;
+            slipsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="3" style="text-align:center; color:#94a3b8; padding:20px;">
+                        <i class="fa-solid fa-receipt"></i><br>No deposit slips found yet
+                    </td>
+                </tr>`;
         }
 
-        // FIX: Is line ko loop ke bahar rakha hai taake perfect total calculation ke baad hi display ho
+        // Total Security Deposit Update
         document.getElementById('prof-advance').innerText = 'Rs. ' + totalAdvance.toLocaleString();
         currentViewingVendorPrice = totalAdvance;
 
-        // 3. Gate pass history section loading
-        const { data: passes } = await currentDb.from('gate_passes').select('*').eq('vendor_id', vendorId).order('created_at', { ascending: false });
+        // Gate Pass History
+        const { data: passes } = await currentDb
+            .from('gate_passes')
+            .select('*')
+            .eq('vendor_id', vendorId);
+
         const historyBody = document.getElementById('vendor-purchase-history-body');
-        
+        historyBody.innerHTML = "";
+
         if (passes && passes.length > 0) {
-            historyBody.innerHTML = "";
+            passes.sort((a, b) => b.id - a.id); // Latest first
             passes.forEach(p => {
+                const statusClass = p.status.toLowerCase() === 'paid' ? 'paid' : 'pending';
                 historyBody.innerHTML += `
                     <tr>
                         <td style="padding:10px; font-weight:600;">#GP-${p.id}</td>
-                        <td style="padding:10px;">${new Date(p.created_at).toLocaleDateString('en-PK')}</td>
+                        <td style="padding:10px;">${new Date(p.created_at || Date.now()).toLocaleDateString('en-PK')}</td>
                         <td style="padding:10px; font-weight:700;">Rs. ${p.grand_total.toLocaleString()}</td>
-                        <td style="padding:10px;"><span class="badge ${p.status.toLowerCase()}">${p.status}</span></td>
+                        <td style="padding:10px;">
+                            <span class="badge ${statusClass}">${p.status}</span>
+                        </td>
                     </tr>`;
             });
         } else {
-            historyBody.innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center; color:#94a3b8;">No tracked gate passes for this client.</td></tr>`;
+            historyBody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="padding:20px; text-align:center; color:#94a3b8;">
+                        No gate passes found.
+                    </td>
+                </tr>`;
         }
 
-        // Profile display toggle and smooth focus scroll
+        // Show Profile
         document.getElementById('vendor-360-profile').style.display = 'block';
         document.getElementById('vendor-360-profile').scrollIntoView({ behavior: 'smooth' });
-    } catch (err) { 
-        console.error("Profile Loading Error: ", err);
-        alert("Profile load karne mein masla aya: " + err.message); 
+
+    } catch (err) {
+        console.error("Full Profile Error:", err);
+        alert("Profile load failed: " + (err.message || err));
     }
 }
 
@@ -200,23 +250,44 @@ function openAdvanceEditModal() {
 
 async function saveNewAdvanceAmount(e) {
     e.preventDefault();
+
     const newVal = parseFloat(document.getElementById('new-advance-input').value);
     const newSlip = document.getElementById('new-advance-slip-input').value.trim();
     const currentDb = getSupabaseClient();
-    if (!currentDb || !activeVendorIdForEdit) return;
+
+    if (!currentDb || !activeVendorIdForEdit) {
+        alert("Vendor select nahi hua!");
+        return;
+    }
+    if (!newVal || !newSlip) {
+        alert("Slip Number aur Amount dono dalna zaroori hai!");
+        return;
+    }
 
     try {
-        // Dynamic save matching target voucher slips parameters
-        const { error } = await currentDb.from('security_deposits').insert([{ vendor_id: activeVendorIdForEdit, slip_number: newSlip, amount: newVal }]);
-        if (error) throw error;
-        
-        alert("Nayi Payment Slip kamyabi se record aur balance mein plus ho gayi!");
-        closeModal('advance-edit-modal');
-        fetchAndShowVendorProfile(activeVendorIdForEdit);
-        loadDashboardStats();
-    } catch (err) { alert(err.message); }
-}
+        const { error } = await currentDb.from('security_deposits').insert([{
+            vendor_id: activeVendorIdForEdit,
+            slip_number: newSlip,
+            amount: newVal
+        }]);
 
+        if (error) throw error;
+
+        alert("✅ Nayi Deposit Slip successfully add ho gayi!");
+
+        closeModal('advance-edit-modal');
+
+        // Profile ko refresh karne ke liye thoda delay
+        setTimeout(() => {
+            fetchAndShowVendorProfile(activeVendorIdForEdit);
+            loadDashboardStats();
+        }, 400);
+
+    } catch (err) {
+        console.error(err);
+        alert("Error: " + err.message);
+    }
+}
 // ================================================================
 // ENGINE 2: CORE GATE PASS FORM PROCESSING & SUPABASE TRANSACTIONS
 // ================================================================
@@ -259,17 +330,17 @@ async function processGatePassEmission(event) {
     try {
         const { data: insertedPass, error: passErr } = await currentDb
             .from('gate_passes')
-            .insert([{ 
-                vendor_id: vendorId, 
-                grand_total: transactionGrandTotal, 
-                paid_amount: defaultPaid, 
-                status: paymentStatus, 
-                items_json: itemsList 
+            .insert([{
+                vendor_id: vendorId,
+                grand_total: transactionGrandTotal,
+                paid_amount: defaultPaid,
+                status: paymentStatus,
+                items_json: itemsList
             }])
             .select();
 
         if (passErr) throw passErr;
-        
+
         const realSequenceId = insertedPass[0].pass_serial || insertedPass[0].id;
 
         const { data: currentVendorRow } = await currentDb.from('vendors').select('total_business').eq('id', vendorId).single();
@@ -283,7 +354,7 @@ async function processGatePassEmission(event) {
         document.getElementById('items-container').innerHTML = '';
         addNewProductRow();
         calculateGrandTotal();
-        
+
         loadDashboardStats();
         loadPendingPaymentsCenter();
 
@@ -301,14 +372,14 @@ function downloadGatePassPDF(passId, vendorName, items, grandTotal, status) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-    doc.setFillColor(30, 41, 59); 
+    doc.setFillColor(30, 41, 59);
     doc.rect(0, 0, 210, 35, "F");
 
     doc.setTextColor(255, 255, 255);
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(22);
     doc.text("SAYLANI MEAT DEPARTMENT", 15, 15);
-    
+
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Automated Vendor Resource Management Control Invoice Engine", 15, 22);
@@ -321,21 +392,21 @@ function downloadGatePassPDF(passId, vendorName, items, grandTotal, status) {
 
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(10);
-    
-    doc.text(`Gate Pass Reference: #GP-${passId}`, 15, 55); 
+
+    doc.text(`Gate Pass Reference: #GP-${passId}`, 15, 55);
     doc.text(`Generation Timestamp: ${new Date().toLocaleString('en-PK')}`, 15, 61);
     doc.text(`Associated Vendor: ${vendorName}`, 15, 67);
-    
+
     if (status === "Paid") {
-        doc.setFillColor(209, 250, 229); 
+        doc.setFillColor(209, 250, 229);
         doc.rect(145, 50, 50, 12, "F");
-        doc.setTextColor(5, 150, 105); 
+        doc.setTextColor(5, 150, 105);
         doc.setFont("Helvetica", "bold");
         doc.text("STATUS: FULLY PAID", 149, 57);
     } else {
-        doc.setFillColor(254, 226, 226); 
+        doc.setFillColor(254, 226, 226);
         doc.rect(145, 50, 50, 12, "F");
-        doc.setTextColor(220, 38, 38); 
+        doc.setTextColor(220, 38, 38);
         doc.setFont("Helvetica", "bold");
         doc.text("STATUS: ON-ACCOUNT", 147, 57);
     }
@@ -362,7 +433,7 @@ function downloadGatePassPDF(passId, vendorName, items, grandTotal, status) {
 
     doc.setFillColor(248, 250, 252);
     doc.rect(120, finalTableY + 8, 75, 15, "F");
-    
+
     doc.setTextColor(15, 23, 42);
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(11);
@@ -371,7 +442,7 @@ function downloadGatePassPDF(passId, vendorName, items, grandTotal, status) {
     doc.setDrawColor(203, 213, 225);
     doc.line(15, finalTableY + 45, 65, finalTableY + 45);
     doc.line(145, finalTableY + 45, 195, finalTableY + 45);
-    
+
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
@@ -395,14 +466,14 @@ async function loadPendingPaymentsCenter() {
             .from('gate_passes')
             .select('*, vendors(name)')
             .eq('status', 'Pending');
-            
+
         if (error) throw error;
 
         let aggregatedPendingStateMap = {};
         pendingPasses.forEach(p => {
             let vName = p.vendors ? p.vendors.name : "Unknown Vendor";
             let actualOwed = p.grand_total - (p.paid_amount || 0);
-            
+
             if (actualOwed > 0) {
                 if (!aggregatedPendingStateMap[vName]) {
                     aggregatedPendingStateMap[vName] = { amountDue: 0, passesCount: 0, vendorName: vName };
@@ -470,23 +541,23 @@ function initiateSettleFlow(passDisplayNum, actualOwed, dbId, grandTotal, paidSo
     activeSettlementPassId = dbId;
     activePassGrandTotal = parseFloat(grandTotal);
     activePassPaidAmountSoFar = parseFloat(paidSoFar);
-    
+
     document.getElementById('modal-pass-num').innerText = "#GP-" + passDisplayNum;
     document.getElementById('modal-pass-amount').innerText = "Rs. " + actualOwed.toLocaleString();
     document.getElementById('modal-dn-input').value = "";
-    
+
     const amountInput = document.getElementById('modal-amount-to-pay');
     if (amountInput) { amountInput.value = actualOwed; }
     openModal('payment-modal');
 }
 
 async function executePaymentSettlement(e) {
-    if (e) e.preventDefault(); 
-    
+    if (e) e.preventDefault();
+
     const currentDb = getSupabaseClient();
     const slipNum = document.getElementById('modal-dn-input').value;
     const amountEntering = parseFloat(document.getElementById('modal-amount-to-pay').value) || 0;
-    
+
     if (!currentDb || !activeSettlementPassId) {
         alert("System connection context issue!");
         return;
@@ -501,10 +572,10 @@ async function executePaymentSettlement(e) {
 
         let remaining = activePassGrandTotal - newTotalPaid;
         alert(remaining <= 0 ? `Full Payment Processed! Slip: ${slipNum}` : `Partial Payment Saved! Remaining: Rs. ${remaining.toLocaleString()}`);
-        
+
         closeModal('payment-modal');
         if (document.getElementById('vendor-passes-container')) document.getElementById('vendor-passes-container').style.display = 'none';
-        
+
         loadDashboardStats();
         loadPendingPaymentsCenter();
         loadLiveVendors();
@@ -526,9 +597,9 @@ async function loadDashboardStats() {
         let depositsSum = deposits ? deposits.reduce((s, i) => s + parseFloat(i.amount || 0), 0) : 0;
         let pendingSum = passes ? passes.reduce((s, p) => p.status === 'Pending' ? s + (p.grand_total - (p.paid_amount || 0)) : s, 0) : 0;
 
-        if(document.getElementById('dash-total-deposits')) document.getElementById('dash-total-deposits').innerText = 'PKR ' + depositsSum.toLocaleString();
-        if(document.getElementById('dash-total-passes')) document.getElementById('dash-total-passes').innerText = passes ? passes.length : 0;
-        if(document.getElementById('dash-pending-payments')) document.getElementById('dash-pending-payments').innerText = 'PKR ' + pendingSum.toLocaleString();
+        if (document.getElementById('dash-total-deposits')) document.getElementById('dash-total-deposits').innerText = 'PKR ' + depositsSum.toLocaleString();
+        if (document.getElementById('dash-total-passes')) document.getElementById('dash-total-passes').innerText = passes ? passes.length : 0;
+        if (document.getElementById('dash-pending-payments')) document.getElementById('dash-pending-payments').innerText = 'PKR ' + pendingSum.toLocaleString();
     } catch (e) { console.error(e); }
 }
 
@@ -597,4 +668,248 @@ function addNewProductRow() {
 function removeProductRow(btn) {
     if (document.querySelectorAll('.item-row').length > 1) { btn.closest('.item-row').remove(); calculateGrandTotal(); }
     else { alert("Kam se kam aik item lazmi hai!"); }
+}
+
+// ================================================================
+// ENGINE 6: PROFESSIONAL PRODUCTS CRUD
+// ================================================================
+
+let currentEditingProductId = null;
+
+async function loadProductsTable() {
+    const tbody = document.getElementById('products-table-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;">
+        <i class="fa-solid fa-spinner fa-spin"></i> Loading Products...
+    </td></tr>`;
+
+    try {
+        const { data: products, error } = await getSupabaseClient()
+            .from('products')
+            .select('*')
+            .order('category', { ascending: true });
+
+        tbody.innerHTML = "";
+
+        if (error) throw error;
+
+        if (!products || products.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:#94a3b8;">
+                No products found yet.
+            </td></tr>`;
+            return;
+        }
+
+        products.forEach(p => {
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding:12px;font-weight:600;">${p.category}</td>
+                    <td style="padding:12px;">${p.name}</td>
+                    <td style="padding:12px;text-align:right;font-weight:700;color:#10b981;">
+                        Rs. ${parseFloat(p.rate).toLocaleString()}
+                    </td>
+                    <td style="padding:12px;">
+                        <button class="btn-primary" style="padding:6px 12px;font-size:13px;margin-right:5px;" 
+                            onclick="openEditProductModal('${p.id}', '${p.category}', '${p.name.replace(/'/g,"\\'")}', ${p.rate})">
+                            Edit
+                        </button>
+                        <button class="btn-danger" style="padding:6px 12px;font-size:13px;" 
+                            onclick="deleteProduct('${p.id}', '${p.name.replace(/'/g,"\\'")}')">Delete</button>
+                    </td>
+                </tr>`;
+        });
+
+        // Refresh products for Gate Pass form
+        Object.keys(productsData).forEach(key => delete productsData[key]);
+        products.forEach(p => {
+            if (!productsData[p.category]) productsData[p.category] = [];
+            productsData[p.category].push({ name: p.name, price: parseFloat(p.rate) });
+        });
+
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:red;padding:40px;">Error: ${err.message}</td></tr>`;
+    }
+}
+
+// ==================== ADD PRODUCT ====================
+function openAddProductModal() {
+    document.getElementById('add-category').value = "Goat";
+    document.getElementById('add-name').value = "";
+    document.getElementById('add-rate').value = "";
+    openModal('product-add-modal');
+}
+
+async function saveNewProduct(e) {
+    e.preventDefault();
+
+    const category = document.getElementById('add-category').value;
+    const name = document.getElementById('add-name').value.trim();
+    const rate = parseFloat(document.getElementById('add-rate').value);
+
+    if (!name || !rate || rate <= 0) {
+        alert("Sab fields sahi se bharein!");
+        return;
+    }
+
+    try {
+        const { error } = await getSupabaseClient()
+            .from('products')
+            .insert([{ category, name, rate }]);
+
+        if (error) throw error;
+
+        alert("✅ New Product Added Successfully!");
+        closeModal('product-add-modal');
+        loadProductsTable();
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+}
+
+// ==================== EDIT PRODUCT ====================
+function openEditProductModal(id, category, name, rate) {
+    currentEditingProductId = id;
+    document.getElementById('edit-category').value = category;
+    document.getElementById('edit-name').value = name;
+    document.getElementById('edit-rate').value = rate;
+    openModal('product-edit-modal');
+}
+
+async function saveProductEdit(e) {
+    e.preventDefault();
+
+    const category = document.getElementById('edit-category').value;
+    const name = document.getElementById('edit-name').value.trim();
+    const rate = parseFloat(document.getElementById('edit-rate').value);
+
+    if (!name || !rate || rate <= 0) {
+        alert("Sab fields sahi se bharein!");
+        return;
+    }
+
+    try {
+        const { error } = await getSupabaseClient()
+            .from('products')
+            .update({ category, name, rate })
+            .eq('id', currentEditingProductId);
+
+        if (error) throw error;
+
+        alert("✅ Product Updated Successfully!");
+        closeModal('product-edit-modal');
+        loadProductsTable();
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+}
+
+// ==================== DELETE PRODUCT ====================
+async function deleteProduct(id, name) {
+    if (!confirm(`"${name}" ko delete karna chahte hain?`)) return;
+
+    try {
+        const { error } = await getSupabaseClient()
+            .from('products')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        alert("✅ Product Deleted!");
+        loadProductsTable();
+    } catch (err) {
+        alert("Delete failed: " + err.message);
+    }
+}
+
+// Tab Switch
+const originalSwitchTab = switchTab;
+switchTab = function(tabId) {
+    originalSwitchTab(tabId);
+    if (tabId === 'products') {
+        setTimeout(loadProductsTable, 200);
+    }
+};
+
+// ================================================================
+// FINAL INVOICES + SAFE SWITCHTAB
+// ================================================================
+
+async function loadInvoicesTable() {
+    const tbody = document.getElementById('invoices-table-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:80px;">
+        <i class="fa-solid fa-spinner fa-spin"></i><br><br>Loading Gate Passes...
+    </td></tr>`;
+
+    try {
+        const { data, error } = await getSupabaseClient()
+            .from('gate_passes')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        tbody.innerHTML = "";
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:80px;color:#94a3b8;">
+                No gate passes found yet.
+            </td></tr>`;
+            return;
+        }
+
+        data.forEach(inv => {
+            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5,'0') : 'N/A'}`;
+            
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding:14px;font-weight:600;">${invoiceNum}</td>
+                    <td style="padding:14px;">${inv.vendor_id || 'N/A'}</td>
+                    <td style="padding:14px;">${new Date(inv.created_at).toLocaleDateString('en-PK')}</td>
+                    <td style="padding:14px;">7 Days</td>
+                    <td style="padding:14px;text-align:right;font-weight:700;color:#10b981;">
+                        Rs. ${parseFloat(inv.grand_total || 0).toLocaleString()}
+                    </td>
+                    <td style="padding:14px;">
+                        <span class="badge ${inv.status?.toLowerCase() === 'paid' ? 'paid' : 'pending'}">
+                            ${inv.status || 'Pending'}
+                        </span>
+                    </td>
+                </tr>`;
+        });
+
+    } catch (err) {
+        console.error("Invoices Error:", err);
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:red;padding:80px;">
+            Error: ${err.message}
+        </td></tr>`;
+    }
+}
+
+// Safe Tab Switch (Syntax Error Fix)
+if (typeof switchTab !== 'function') {
+    window.switchTab = function(tabId) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+        
+        const tab = document.getElementById(tabId + '-tab');
+        if (tab) tab.classList.add('active');
+        
+        const link = document.querySelector(`.nav-links a[onclick*="${tabId}"]`);
+        if (link) link.classList.add('active');
+
+        if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
+        if (tabId === 'products') setTimeout(loadProductsTable, 300);
+    };
+} else {
+    const oldSwitch = switchTab;
+    switchTab = function(tabId) {
+        oldSwitch(tabId);
+        if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
+        if (tabId === 'products') setTimeout(loadProductsTable, 300);
+    };
 }
