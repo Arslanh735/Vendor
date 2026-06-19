@@ -706,16 +706,16 @@ async function loadProductsTable() {
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding:12px;font-weight:600;">${p.category}</td>
                     <td style="padding:12px;">${p.name}</td>
-                    <td style="padding:12px;text-align:right;font-weight:700;color:#10b981;">
+                    <td style="padding:12px;text-align:center;font-weight:700;color:#10b981;">
                         Rs. ${parseFloat(p.rate).toLocaleString()}
                     </td>
                     <td style="padding:12px;">
                         <button class="btn-primary" style="padding:6px 12px;font-size:13px;margin-right:5px;" 
-                            onclick="openEditProductModal('${p.id}', '${p.category}', '${p.name.replace(/'/g,"\\'")}', ${p.rate})">
+                            onclick="openEditProductModal('${p.id}', '${p.category}', '${p.name.replace(/'/g, "\\'")}', ${p.rate})">
                             Edit
                         </button>
                         <button class="btn-danger" style="padding:6px 12px;font-size:13px;" 
-                            onclick="deleteProduct('${p.id}', '${p.name.replace(/'/g,"\\'")}')">Delete</button>
+                            onclick="deleteProduct('${p.id}', '${p.name.replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>`;
         });
@@ -826,7 +826,7 @@ async function deleteProduct(id, name) {
 
 // Tab Switch
 const originalSwitchTab = switchTab;
-switchTab = function(tabId) {
+switchTab = function (tabId) {
     originalSwitchTab(tabId);
     if (tabId === 'products') {
         setTimeout(loadProductsTable, 200);
@@ -846,9 +846,10 @@ async function loadInvoicesTable() {
     </td></tr>`;
 
     try {
+        // Vendor ka naam sath lane ke liye query
         const { data, error } = await getSupabaseClient()
             .from('gate_passes')
-            .select('*')
+            .select('*, vendors(name)')
             .order('created_at', { ascending: false });
 
         tbody.innerHTML = "";
@@ -863,18 +864,19 @@ async function loadInvoicesTable() {
         }
 
         data.forEach(inv => {
-            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5,'0') : 'N/A'}`;
-            
+            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5, '0') : 'N/A'}`;
+            const vendorNameDisplay = inv.vendors ? inv.vendors.name : (inv.vendor_id || 'N/A');
+
             tbody.innerHTML += `
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding:14px;font-weight:600;">${invoiceNum}</td>
-                    <td style="padding:14px;">${inv.vendor_id || 'N/A'}</td>
-                    <td style="padding:14px;">${new Date(inv.created_at).toLocaleDateString('en-PK')}</td>
-                    <td style="padding:14px;">7 Days</td>
-                    <td style="padding:14px;text-align:right;font-weight:700;color:#10b981;">
+                <tr style="border-bottom: 1px solid #e2e8f0; background: #ffffff;">
+                    <td style="padding: 14px 12px; text-align: center; font-weight: 600; color: #1e293b;">${invoiceNum}</td>
+                    <td style="padding: 14px 12px; text-align: center; color: #334155;">${vendorNameDisplay}</td>
+                    <td style="padding: 14px 12px; text-align: center; color: #475569;">${new Date(inv.created_at).toLocaleDateString('en-PK')}</td>
+                    <td style="padding: 14px 12px; text-align: center; color: #475569;">7 Days</td>
+                    <td style="padding: 14px 12px; text-align: right; font-weight: 700; color: #10b981;">
                         Rs. ${parseFloat(inv.grand_total || 0).toLocaleString()}
                     </td>
-                    <td style="padding:14px;">
+                    <td style="padding: 14px 12px; text-align: center;">
                         <span class="badge ${inv.status?.toLowerCase() === 'paid' ? 'paid' : 'pending'}">
                             ${inv.status || 'Pending'}
                         </span>
@@ -892,13 +894,13 @@ async function loadInvoicesTable() {
 
 // Safe Tab Switch (Syntax Error Fix)
 if (typeof switchTab !== 'function') {
-    window.switchTab = function(tabId) {
+    window.switchTab = function (tabId) {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-        
+
         const tab = document.getElementById(tabId + '-tab');
         if (tab) tab.classList.add('active');
-        
+
         const link = document.querySelector(`.nav-links a[onclick*="${tabId}"]`);
         if (link) link.classList.add('active');
 
@@ -907,7 +909,7 @@ if (typeof switchTab !== 'function') {
     };
 } else {
     const oldSwitch = switchTab;
-    switchTab = function(tabId) {
+    switchTab = function (tabId) {
         oldSwitch(tabId);
         if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
         if (tabId === 'products') setTimeout(loadProductsTable, 300);
