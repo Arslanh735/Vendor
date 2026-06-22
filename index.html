@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saylani Meat Dept - Vendor ERP</title>
+    <title> Vendor App</title>
     <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
@@ -15,6 +15,7 @@
     <!-- CLIENT SIDE PDF INJECTORS (jsPDF & AutoTable Plugin) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.6.0/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -24,7 +25,7 @@
         <aside class="sidebar">
             <div class="logo-area">
                 <i class="fa-solid fa-cow logo-icon"></i>
-                <h2>Saylani ERP</h2>
+                <h2>Vendor App</h2>
             </div>
             <nav class="nav-links">
                 <a href="#" class="active" onclick="switchTab('dashboard')"><i class="fa-solid fa-chart-pie"></i>
@@ -32,7 +33,7 @@
                 <a href="#" onclick="switchTab('vendors')"><i class="fa-solid fa-users"></i> Vendors & Ledger</a>
                 <a href="#" id="pending-nav-link" onclick="switchTab('pending-payments')"><i
                         class="fa-solid fa-clock-rotate-left"></i> Pending Payments</a>
-                        <a href="#" onclick="switchTab('invoices')"><i class="fa-solid fa-file-invoice"></i> Invoices</a>
+                <a href="#" onclick="switchTab('invoices')"><i class="fa-solid fa-file-invoice"></i> Invoices</a>
                 <a href="#" onclick="switchTab('gatepass')"><i class="fa-solid fa-ticket"></i> Gate Pass Gen</a>
                 <a href="#" onclick="switchTab('products')"><i class="fa-solid fa-layer-group"></i> Product Rates</a>
                 <a href="#" id="admin-nav" onclick="switchTab('users')"><i class="fa-solid fa-user-shield"></i> User
@@ -92,6 +93,24 @@
                             <div class="card-data">
                                 <h3 id="dash-pending-payments">PKR 0</h3>
                                 <p>Pending Payments <i class="fa-solid fa-arrow-right-long"></i></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dashboard-grid"
+                        style="margin-top: 25px; display: grid; grid-template-columns: 1fr; gap: 20px;">
+                        <div class="stat-card"
+                            style="background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: var(--shadow);">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">
+                                <h3 style="color: #1e293b; font-size: 16px; font-weight: 700;">
+                                    <i class="fa-solid fa-chart-bar" style="color: #10b981; margin-right: 8px;"></i>
+                                    Month-wise Business Performance (Scale Stacking View)
+                                </h3>
+                                <span
+                                    style="font-size: 12px; font-weight: 600; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 20px;">Real-time</span>
+                            </div>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="businessStackChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -265,13 +284,6 @@
                                         <option value="">-- Choose Vendor --</option>
                                     </select>
                                 </div>
-                                <div class="form-group">
-                                    <label>Payment Method Mode</label>
-                                    <select id="gp-payment-method" required>
-                                        <option value="Pending">On-Account / Pending Bill</option>
-                                        <option value="Paid">Direct Advance Paid (DN Slip)</option>
-                                    </select>
-                                </div>
                             </div>
 
                             <div class="billing-items-header">
@@ -288,10 +300,10 @@
                                     <div>
                                         <select class="category-select" onchange="loadItemsByCategory(this)" required>
                                             <option value="">-- Choose --</option>
-                                            <option value="Goat">Goat (بکرا)</option>
-                                            <option value="Cow">Cow (گائے)</option>
-                                            <option value="Camel">Camel (اونٹ)</option>
-                                            <option value="Chicken">Chicken (مرغی)</option>
+                                            <option value="Goat">Goat</option>
+                                            <option value="Cow">Cow</option>
+                                            <option value="Camel">Camel</option>
+                                            <option value="Chicken">Chicken</option>
                                         </select>
                                     </div>
                                     <div><select class="item-select" onchange="updateDefaultPrice(this)" required
@@ -322,54 +334,57 @@
                 </section>
 
                 <!-- 5. PRODUCT RATES TAB -->
-<section id="products-tab" class="tab-content">
-    <div class="tab-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h1>Live Stock Base Rates Configuration</h1>
-        <button class="btn-primary" onclick="openAddProductModal()">
-            <i class="fa-solid fa-plus"></i> Add New Product
-        </button>
-    </div>
+                <section id="products-tab" class="tab-content">
+                    <div class="tab-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h1>Live Stock Base Rates Configuration</h1>
+                        <button class="btn-primary" onclick="openAddProductModal()">
+                            <i class="fa-solid fa-plus"></i> Add New Product
+                        </button>
+                    </div>
 
-    <div class="card" style="overflow-x: auto;">
-        <table class="erp-table" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 12px;">Category</th>
-                    <th style="padding: 12px;">Product Name</th>
-                    <th style="padding: 12px; text-align: center;">Rate (PKR)</th>
-                    <th style="padding: 12px; width: 200px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="products-table-body"></tbody>
-        </table>
-    </div>
-</section>
-<!-- 7. INVOICES TAB -->
-<section id="invoices-tab" class="tab-content">
-    <div class="tab-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h1>All Gate Passes / Invoices</h1>
-        <div class="search-bar" style="width: 320px;">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="invoice-search" placeholder="Search by Vendor, Date or INV Number..." onkeyup="filterInvoices()">
-        </div>
-    </div>
+                    <div class="card" style="overflow-x: auto;">
+                        <table class="erp-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 12px;">Category</th>
+                                    <th style="padding: 12px;">Product Name</th>
+                                    <th style="padding: 12px; text-align: center;">Rate (PKR)</th>
+                                    <th style="padding: 12px; width: 200px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+                <!-- 7. INVOICES TAB -->
+                <section id="invoices-tab" class="tab-content">
+                    <div class="tab-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h1>All Gate Passes / Invoices</h1>
+                        <div class="search-bar" style="width: 320px;">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="invoice-search" placeholder="Search by Vendor, Date or INV Number..."
+                                onkeyup="filterInvoices()">
+                        </div>
+                    </div>
 
-    <div class="card" style="overflow-x: auto;">
-        <table class="erp-table" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 12px;">Invoice #</th>
-                    <th style="padding: 12px;">Vendor Name</th>
-                    <th style="padding: 12px;">Invoice Date</th>
-                    <th style="padding: 12px;">Due Date</th>
-                    <th style="padding: 12px; text-align: right;">Grand Total</th>
-                    <th style="padding: 12px;">Status</th>
-                </tr>
-            </thead>
-            <tbody id="invoices-table-body"></tbody>
-        </table>
-    </div>
-</section>
+                    <div class="card" style="overflow-x: auto;">
+                        <table class="erp-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 12px;">Invoice #</th>
+                                    <th style="padding: 12px;">Vendor Name</th>
+                                    <th style="padding: 12px;">Invoice Date</th>
+                                    <th style="padding: 12px;">Due Date</th>
+                                    <th style="padding: 12px; text-align: right;">Grand Total</th>
+                                    <th style="padding: 12px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoices-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
 
             </div>
         </main>
@@ -458,72 +473,148 @@
         </div>
     </div>
     <!-- ADD PRODUCT MODAL -->
-<div id="product-add-modal" class="modal-overlay">
-    <div class="modal-box">
-        <div class="modal-header">
-            <h3>Add New Product</h3>
-            <button class="close-modal-btn" onclick="closeModal('product-add-modal')">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="product-add-form" onsubmit="saveNewProduct(event)">
-                <div class="form-group">
-                    <label>Category</label>
-                    <select id="add-category" required>
-                        <option value="Goat">Goat (بکرا)</option>
-                        <option value="Cow">Cow (گائے)</option>
-                        <option value="Camel">Camel (اونٹ)</option>
-                        <option value="Chicken">Chicken (مرغی)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Product Name</label>
-                    <input type="text" id="add-name" placeholder="e.g. Goat Siri" required>
-                </div>
-                <div class="form-group">
-                    <label>Rate (PKR)</label>
-                    <input type="number" id="add-rate" min="1" placeholder="350" required>
-                </div>
-                <button type="submit" class="btn-primary btn-large" style="margin-top:15px;">
-                    <i class="fa-solid fa-plus"></i> Add Product
-                </button>
-            </form>
+    <div id="product-add-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Add New Product</h3>
+                <button class="close-modal-btn" onclick="closeModal('product-add-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="product-add-form" onsubmit="saveNewProduct(event)">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="add-category" required>
+                            <option value="Goat">Goat</option>
+                            <option value="Cow">Cow</option>
+                            <option value="Camel">Camel</option>
+                            <option value="Chicken">Chicken</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Product Name</label>
+                        <input type="text" id="add-name" placeholder="e.g. Goat Siri" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Rate (PKR)</label>
+                        <input type="number" id="add-rate" min="1" placeholder="350" required>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large" style="margin-top:15px;">
+                        <i class="fa-solid fa-plus"></i> Add Product
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- EDIT PRODUCT MODAL -->
-<div id="product-edit-modal" class="modal-overlay">
-    <div class="modal-box">
-        <div class="modal-header">
-            <h3>Edit Product</h3>
-            <button class="close-modal-btn" onclick="closeModal('product-edit-modal')">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="product-edit-form" onsubmit="saveProductEdit(event)">
-                <div class="form-group">
-                    <label>Category</label>
-                    <select id="edit-category" required>
-                        <option value="Goat">Goat (بکرا)</option>
-                        <option value="Cow">Cow (گائے)</option>
-                        <option value="Camel">Camel (اونٹ)</option>
-                        <option value="Chicken">Chicken (مرغی)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Product Name</label>
-                    <input type="text" id="edit-name" required>
-                </div>
-                <div class="form-group">
-                    <label>Rate (PKR)</label>
-                    <input type="number" id="edit-rate" min="1" required>
-                </div>
-                <button type="submit" class="btn-primary btn-large" style="margin-top:15px;">
-                    <i class="fa-solid fa-save"></i> Save Changes
-                </button>
-            </form>
+    <!-- EDIT PRODUCT MODAL -->
+    <div id="product-edit-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Edit Product</h3>
+                <button class="close-modal-btn" onclick="closeModal('product-edit-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="product-edit-form" onsubmit="saveProductEdit(event)">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="edit-category" required>
+                            <option value="Goat">Goat</option>
+                            <option value="Cow">Cow</option>
+                            <option value="Camel">Camel</option>
+                            <option value="Chicken">Chicken</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Product Name</label>
+                        <input type="text" id="edit-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Rate (PKR)</label>
+                        <input type="number" id="edit-rate" min="1" required>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large" style="margin-top:15px;">
+                        <i class="fa-solid fa-save"></i> Save Changes
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+
+    <div id="gatepass-edit-modal" class="modal-overlay">
+        <div class="modal-box" style="width: 700px; max-width: 95%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-pen-to-square"></i> Edit Gate Pass Details</h3>
+                <button class="close-modal-btn" onclick="closeModal('gatepass-edit-modal')">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
+                <form id="gatepass-edit-form" onsubmit="saveGatePassEdit(event)">
+                    <input type="hidden" id="edit-gp-id">
+
+                    <div class="form-grid"
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label>Vendor Name</label>
+                            <select id="edit-gp-vendor" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="edit-gp-status" required>
+                                <option value="Pending">Pending</option>
+                                <option value="Paid">Paid</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-grid"
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div class="form-group">
+                            <label>Paid Amount (Rs.)</label>
+                            <input type="number" id="edit-gp-paid" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Grand Total (Auto-Calculated) - Rs.</label>
+                            <input type="number" id="edit-gp-total" readonly
+                                style="background: #f1f5f9; font-weight: bold; color: #10b981;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label
+                            style="font-weight: bold; margin-bottom: 10px; color: #1e293b; display: block; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                            <i class="fa-solid fa-list"></i> Gate Pass Items List
+                        </label>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                <thead>
+                                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                        <th style="padding: 10px; text-align: left;">Category</th>
+                                        <th style="padding: 10px; text-align: left;">Item Name</th>
+                                        <th style="padding: 10px; text-align: left; width: 100px;">Rate (Rs.)</th>
+                                        <th style="padding: 10px; text-align: left; width: 80px;">Qty</th>
+                                        <th style="padding: 10px; text-align: right; width: 120px;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="edit-gp-items-table-body">
+                                </tbody>
+                            </table>
+                            <div style="margin-top: 10px; text-align: right;">
+                                <button type="button" class="btn-primary"
+                                    style="background: #2563eb; padding: 6px 12px; font-size: 13px;"
+                                    onclick="addNewRowToEditModal()">
+                                    <i class="fa-solid fa-plus"></i> Add Another Product
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-large"
+                        style="margin-top:25px; width: 100%; font-size: 16px;">
+                        <i class="fa-solid fa-save"></i> Save Gate Pass Changes
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

@@ -24,10 +24,16 @@ function getSupabaseClient() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    setTimeout(() => {
+    setTimeout(async () => {
+        if (typeof loadProductsTable === 'function') {
+            await loadProductsTable();
+        }
         loadLiveVendors();
         loadDashboardStats();
         loadPendingPaymentsCenter();
+        
+        // Dynamic Chart Triggering Added Here
+        loadMonthlyBusinessChart(); 
     }, 400);
 });
 
@@ -73,13 +79,13 @@ async function registerNewVendor(event) {
 
         if (dErr) throw dErr;
 
-        alert('Vendor Accounts Registry Completed Successfully!');
+        showToast('Vendor Accounts Registry Completed Successfully!');
         document.getElementById('add-vendor-form').reset();
         closeModal('vendor-modal');
 
         loadLiveVendors();
         loadDashboardStats();
-    } catch (err) { alert(err.message); }
+    } catch (err) { showToast(err.message); }
 }
 
 async function loadLiveVendors() {
@@ -232,13 +238,13 @@ async function fetchAndShowVendorProfile(vendorId) {
 
     } catch (err) {
         console.error("Full Profile Error:", err);
-        alert("Profile load failed: " + (err.message || err));
+        showToast("Profile load failed: " + (err.message || err));
     }
 }
 
 function openAdvanceEditModal() {
     if (!activeVendorIdForEdit) {
-        alert("Pehle kisi vendor ka 'View Profile' button duba kar profile load karein!");
+        showToast("Pehle kisi vendor ka 'View Profile' button duba kar profile load karein!");
         return;
     }
     const currentVendorName = document.getElementById('prof-card-name').innerText;
@@ -256,11 +262,11 @@ async function saveNewAdvanceAmount(e) {
     const currentDb = getSupabaseClient();
 
     if (!currentDb || !activeVendorIdForEdit) {
-        alert("Vendor select nahi hua!");
+        showToast("Vendor select nahi hua!");
         return;
     }
     if (!newVal || !newSlip) {
-        alert("Slip Number aur Amount dono dalna zaroori hai!");
+        showToast("Slip Number aur Amount dono dalna zaroori hai!");
         return;
     }
 
@@ -273,7 +279,7 @@ async function saveNewAdvanceAmount(e) {
 
         if (error) throw error;
 
-        alert("✅ Nayi Deposit Slip successfully add ho gayi!");
+        showToast("✅ Nayi Deposit Slip successfully add ho gayi!");
 
         closeModal('advance-edit-modal');
 
@@ -285,7 +291,7 @@ async function saveNewAdvanceAmount(e) {
 
     } catch (err) {
         console.error(err);
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message);
     }
 }
 // ================================================================
@@ -300,7 +306,9 @@ async function processGatePassEmission(event) {
     const vendorSelect = document.getElementById('gp-vendor-select');
     const vendorId = vendorSelect.value;
     const vendorName = vendorSelect.options[vendorSelect.selectedIndex].text;
-    const paymentStatus = document.getElementById('gp-payment-method').value;
+    
+    // YAHAN CHANGE KIYA: Dropdown ki bajaye direct 'Pending' set kar diya
+    const paymentStatus = 'Pending';
 
     let itemsList = [];
     let transactionGrandTotal = 0;
@@ -321,11 +329,12 @@ async function processGatePassEmission(event) {
     });
 
     if (itemsList.length === 0) {
-        alert("Kam se kam aik valid purchase item set karna lazmi hai!");
+        showToast("Kam se kam aik valid purchase item set karna lazmi hai!");
         return;
     }
 
-    let defaultPaid = (paymentStatus === 'Paid') ? transactionGrandTotal : 0;
+    // YAHAN CHANGE KIYA: Hamesha 0 se start hoga jab tak 1 month baad decision na ho
+    let defaultPaid = 0;
 
     try {
         const { data: insertedPass, error: passErr } = await currentDb
@@ -347,7 +356,7 @@ async function processGatePassEmission(event) {
         let updatedBusinessVolume = (currentVendorRow ? parseFloat(currentVendorRow.total_business || 0) : 0) + transactionGrandTotal;
         await currentDb.from('vendors').update({ total_business: updatedBusinessVolume }).eq('id', vendorId);
 
-        alert(`Gate Pass #GP-${realSequenceId} dynamically logged! Printing PDF...`);
+        showToast(`Gate Pass #GP-${realSequenceId} dynamically logged! Printing PDF...`);
         downloadGatePassPDF(realSequenceId, vendorName, itemsList, transactionGrandTotal, paymentStatus);
 
         document.getElementById('gatepass-form').reset();
@@ -360,7 +369,7 @@ async function processGatePassEmission(event) {
 
     } catch (err) {
         console.error("Gate pass generation error:", err);
-        alert("Database write error: " + err.message);
+        showToast("Database write error: " + err.message);
     }
 }
 
@@ -520,14 +529,36 @@ async function renderUnpaidPassesTableRows(vendorName) {
             let actualOwed = p.grand_total - (p.paid_amount || 0);
             if (actualOwed > 0) {
                 let displayNum = p.pass_serial ? p.pass_serial : p.id;
+                
+                // 1 Month (30 Days) Date Calculation Logic
+                const passDate = new Date(p.created_at);
+                const today = new Date();
+                const differenceInDays = Math.floor((today - passDate) / (1000 * 60 * 60 * 24));
+                
+                let actionButtonHtml = "";
+                
+                if (differenceInDays >= 30) {
+                    // Agar 30 din ho chuke hain to decision check trigger karega click pr
+                    actionButtonHtml = `
+                        <button class="btn-primary" style="background:#ea580c; padding:6px 12px; font-size:12px;" 
+                            onclick="handleExpiredPassDecision('${p.id}', '${p.vendor_id}', ${actualOwed}, '${displayNum}', '${vendorName}')">
+                            ⚠️ Action Required (30+ Days)
+                        </button>`;
+                } else {
+                    // Normal behavior clear balance ka
+                    actionButtonHtml = `
+                        <button class="btn-primary" style="background:#10b981; padding:6px 12px; font-size:12px;" 
+                            onclick="initiateSettleFlow('${displayNum}', ${actualOwed}, '${p.id}', ${p.grand_total}, ${p.paid_amount || 0})">
+                            Clear Balance
+                        </button>`;
+                }
+
                 tbody.innerHTML += `
                     <tr style="border-bottom:1px solid #e2e8f0;">
-                        <td style="padding:12px;">${new Date(p.created_at).toLocaleDateString('en-PK')}</td>
+                        <td style="padding:12px;">${passDate.toLocaleDateString('en-PK')} (${differenceInDays} days ago)</td>
                         <td style="padding:12px; font-weight:600;">#GP-${displayNum}</td>
-                        <td style="padding:12px; color:#ef4444; font-weight:700;">Rs. ${actualOwed.toLocaleString()} <small style="color:#64748b;font-weight:normal;">(Total: ${p.grand_total})</small></td>
-                        <td style="padding:12px;">
-                            <button class="btn-primary" style="background:#10b981; padding:6px 12px; font-size:12px;" onclick="initiateSettleFlow('${displayNum}', ${actualOwed}, '${p.id}', ${p.grand_total}, ${p.paid_amount || 0})">Clear Balance</button>
-                        </td>
+                        <td style="padding:12px; color:#ef4444; font-weight:700;">Rs. ${actualOwed.toLocaleString()}</td>
+                        <td style="padding:12px;">${actionButtonHtml}</td>
                     </tr>`;
             }
         });
@@ -535,6 +566,74 @@ async function renderUnpaidPassesTableRows(vendorName) {
         document.getElementById('vendor-passes-container').style.display = 'block';
         document.getElementById('vendor-passes-container').scrollIntoView({ behavior: 'smooth' });
     } catch (e) { console.error("Table rendering error:", e); }
+}
+
+// 1 Month Expiry Prompt Window Handle
+async function handleExpiredPassDecision(passId, vendorId, amountDue, displayNum, vendorName) {
+    const msg = `Bhai! Gate Pass #GP-${displayNum} ko khade hue 1 mahina ho gaya hai.\n\n` +
+                `Aap kia karna chahte hain?\n` +
+                `1. ADVANCE SE KATNA HAIN? -> 'OK' Dabaein.\n` +
+                `2. PENDING MAIN HI KHADA RAKHNA HAIN? -> 'Cancel' Dabaein.`;
+                
+    if (confirm(msg)) {
+        // User ne Advance cut select kiya (OK)
+        await executeAdvanceDeduction(passId, vendorId, amountDue, displayNum, vendorName);
+    } else {
+        // User ne Pending chhorna select kiya (Cancel)
+        showToast("Theek hai, is gate pass ko pending list main hi barkarar rakha gaya hai.");
+    }
+}
+
+// Security Advance Deduction Processing Core
+async function executeAdvanceDeduction(passId, vendorId, amountDue, displayNum, vendorName) {
+    const currentDb = getSupabaseClient();
+    if (!currentDb) return;
+
+    try {
+        // 1. Pehle check karein vendor ka kul security deposit kitna bacha hai
+        const { data: deposits, error: dErr } = await currentDb
+            .from('security_deposits')
+            .select('amount')
+            .eq('vendor_id', vendorId);
+
+        if (dErr) throw dErr;
+
+        let totalAdvanceAvailable = deposits ? deposits.reduce((s, i) => s + parseFloat(i.amount || 0), 0) : 0;
+
+        if (totalAdvanceAvailable < amountDue) {
+            showToast(`❌ Deduction Failed! Vendor ka kul advance Rs. ${totalAdvanceAvailable.toLocaleString()} hai, jabki bill Rs. ${amountDue.toLocaleString()} hai. Balance na-kafi hai!`);
+            return;
+        }
+
+        // 2. Security deposits me minus value entry pass karein taake ledger clear rahe
+        const { error: insertErr } = await currentDb.from('security_deposits').insert([{
+            vendor_id: vendorId,
+            slip_number: `AUTO-DEDUCT-GP${displayNum}`,
+            amount: -amountDue // Minus value balance deduct kardegi
+        }]);
+
+        if (insertErr) throw insertErr;
+
+        // 3. Gate Pass status ko 'Paid' kar dein
+        const { error: passErr } = await currentDb
+            .from('gate_passes')
+            .update({ paid_amount: amountDue, status: 'Paid' })
+            .eq('id', passId);
+
+        if (passErr) throw passErr;
+
+        showToast(`✅ MASHALLAH! Rs. ${amountDue.toLocaleString()} successfully vendor ke advance security account se deduct kar ke Gate Pass #GP-${displayNum} clear kar diya gaya hai!`);
+        
+        // UI Refresh
+        if (document.getElementById('vendor-passes-container')) document.getElementById('vendor-passes-container').style.display = 'none';
+        loadDashboardStats();
+        loadPendingPaymentsCenter();
+        loadLiveVendors();
+
+    } catch (err) {
+        console.error(err);
+        showToast("Deduction error: " + err.message);
+    }
 }
 
 function initiateSettleFlow(passDisplayNum, actualOwed, dbId, grandTotal, paidSoFar) {
@@ -559,7 +658,7 @@ async function executePaymentSettlement(e) {
     const amountEntering = parseFloat(document.getElementById('modal-amount-to-pay').value) || 0;
 
     if (!currentDb || !activeSettlementPassId) {
-        alert("System connection context issue!");
+        showToast("System connection context issue!");
         return;
     }
 
@@ -571,7 +670,7 @@ async function executePaymentSettlement(e) {
         if (error) throw error;
 
         let remaining = activePassGrandTotal - newTotalPaid;
-        alert(remaining <= 0 ? `Full Payment Processed! Slip: ${slipNum}` : `Partial Payment Saved! Remaining: Rs. ${remaining.toLocaleString()}`);
+        showToast(remaining <= 0 ? `Full Payment Processed! Slip: ${slipNum}` : `Partial Payment Saved! Remaining: Rs. ${remaining.toLocaleString()}`);
 
         closeModal('payment-modal');
         if (document.getElementById('vendor-passes-container')) document.getElementById('vendor-passes-container').style.display = 'none';
@@ -579,7 +678,7 @@ async function executePaymentSettlement(e) {
         loadDashboardStats();
         loadPendingPaymentsCenter();
         loadLiveVendors();
-    } catch (err) { alert(err.message); }
+    } catch (err) { showToast(err.message); }
 }
 
 // ================================================================
@@ -667,7 +766,7 @@ function addNewProductRow() {
 
 function removeProductRow(btn) {
     if (document.querySelectorAll('.item-row').length > 1) { btn.closest('.item-row').remove(); calculateGrandTotal(); }
-    else { alert("Kam se kam aik item lazmi hai!"); }
+    else { showToast("Kam se kam aik item lazmi hai!"); }
 }
 
 // ================================================================
@@ -749,7 +848,7 @@ async function saveNewProduct(e) {
     const rate = parseFloat(document.getElementById('add-rate').value);
 
     if (!name || !rate || rate <= 0) {
-        alert("Sab fields sahi se bharein!");
+        showToast("Sab fields sahi se bharein!");
         return;
     }
 
@@ -760,11 +859,11 @@ async function saveNewProduct(e) {
 
         if (error) throw error;
 
-        alert("✅ New Product Added Successfully!");
+        showToast("✅ New Product Added Successfully!");
         closeModal('product-add-modal');
         loadProductsTable();
     } catch (err) {
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message);
     }
 }
 
@@ -785,7 +884,7 @@ async function saveProductEdit(e) {
     const rate = parseFloat(document.getElementById('edit-rate').value);
 
     if (!name || !rate || rate <= 0) {
-        alert("Sab fields sahi se bharein!");
+        showToast("Sab fields sahi se bharein!");
         return;
     }
 
@@ -797,11 +896,11 @@ async function saveProductEdit(e) {
 
         if (error) throw error;
 
-        alert("✅ Product Updated Successfully!");
+        showToast("✅ Product Updated Successfully!");
         closeModal('product-edit-modal');
         loadProductsTable();
     } catch (err) {
-        alert("Error: " + err.message);
+        showToast("Error: " + err.message);
     }
 }
 
@@ -817,10 +916,10 @@ async function deleteProduct(id, name) {
 
         if (error) throw error;
 
-        alert("✅ Product Deleted!");
+        showToast("✅ Product Deleted!");
         loadProductsTable();
     } catch (err) {
-        alert("Delete failed: " + err.message);
+        showToast("Delete failed: " + err.message);
     }
 }
 
@@ -841,15 +940,14 @@ async function loadInvoicesTable() {
     const tbody = document.getElementById('invoices-table-body');
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:80px;">
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:80px;">
         <i class="fa-solid fa-spinner fa-spin"></i><br><br>Loading Gate Passes...
     </td></tr>`;
 
     try {
-        // Vendor ka naam sath lane ke liye query
         const { data, error } = await getSupabaseClient()
             .from('gate_passes')
-            .select('*, vendors(name)')
+            .select('*, vendors(id, name)') 
             .order('created_at', { ascending: false });
 
         tbody.innerHTML = "";
@@ -857,36 +955,46 @@ async function loadInvoicesTable() {
         if (error) throw error;
 
         if (!data || data.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:80px;color:#94a3b8;">
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:80px;color:#94a3b8;">
                 No gate passes found yet.
             </td></tr>`;
             return;
         }
 
         data.forEach(inv => {
-            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5, '0') : 'N/A'}`;
+            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5,'0') : 'N/A'}`;
             const vendorNameDisplay = inv.vendors ? inv.vendors.name : (inv.vendor_id || 'N/A');
+            
+            // CHECK LOGIC HERE: Agar items_json ya comment string mein 'edited' ka surag mile to tag dikhaye
+            const editCommentHtml = inv.is_edited || inv.pass_serial?.includes('(Edit)') ? 
+                `<br><span style="font-size:11px; color:#ef4444; font-weight:bold; background:#fee2e2; padding:2px 6px; border-radius:4px; margin-top:4px; display:inline-block;">(Edit)</span>` : '';
 
             tbody.innerHTML += `
                 <tr style="border-bottom: 1px solid #e2e8f0; background: #ffffff;">
-                    <td style="padding: 14px 12px; text-align: center; font-weight: 600; color: #1e293b;">${invoiceNum}</td>
-                    <td style="padding: 14px 12px; text-align: center; color: #334155;">${vendorNameDisplay}</td>
-                    <td style="padding: 14px 12px; text-align: center; color: #475569;">${new Date(inv.created_at).toLocaleDateString('en-PK')}</td>
-                    <td style="padding: 14px 12px; text-align: center; color: #475569;">7 Days</td>
-                    <td style="padding: 14px 12px; text-align: right; font-weight: 700; color: #10b981;">
+                    <td style="padding: 14px 12px; text-align: left; font-weight: 600; color: #1e293b;">${invoiceNum} ${editCommentHtml}</td>
+                    <td style="padding: 14px 12px; text-align: left; color: #334155;">${vendorNameDisplay}</td>
+                    <td style="padding: 14px 12px; text-align: left; color: #475569;">${new Date(inv.created_at).toLocaleDateString('en-PK')}</td>
+                    <td style="padding: 14px 12px; text-align: left; color: #475569;">7 Days</td>
+                    <td style="padding: 14px 12px; text-align: left; font-weight: 700; color: #10b981;">
                         Rs. ${parseFloat(inv.grand_total || 0).toLocaleString()}
                     </td>
-                    <td style="padding: 14px 12px; text-align: center;">
+                    <td style="padding: 14px 12px; text-align: left;">
                         <span class="badge ${inv.status?.toLowerCase() === 'paid' ? 'paid' : 'pending'}">
                             ${inv.status || 'Pending'}
                         </span>
+                    </td>
+                    <td style="padding: 14px 12px; text-align: left;">
+                        <button class="btn-primary" style="padding: 6px 10px; font-size: 12px; background: #3b82f6;" 
+                            onclick="openGatePassEditModal('${inv.id}')">
+                            <i class="fa-solid fa-pen"></i> Edit
+                        </button>
                     </td>
                 </tr>`;
         });
 
     } catch (err) {
         console.error("Invoices Error:", err);
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:red;padding:80px;">
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;padding:80px;">
             Error: ${err.message}
         </td></tr>`;
     }
@@ -914,4 +1022,343 @@ if (typeof switchTab !== 'function') {
         if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
         if (tabId === 'products') setTimeout(loadProductsTable, 300);
     };
+}
+
+// Global Toast Notification System
+window.showToast = function(message, type = 'success') {
+    // Agar pehle se container nahi bana hua to banao
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    // Toast element create karein
+    const toast = document.createElement('div');
+    toast.className = `custom-toast ${type}`;
+    
+    // Icon type ke mutabik set karein
+    let icon = '<i class="fa-solid fa-circle-check"></i>';
+    if (type === 'error') icon = '<i class="fa-solid fa-circle-xmark"></i>';
+    if (type === 'warning') icon = '<i class="fa-solid fa-circle-exclamation"></i>';
+    if (type === 'info') icon = '<i class="fa-solid fa-circle-info"></i>';
+
+    toast.innerHTML = `${icon} <span>${message}</span>`;
+    container.appendChild(toast);
+
+    // 3.5 seconds baad animate karke remove karo
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => { toast.remove(); }, 300);
+    }, 3500);
+}
+
+// 1. Modal open karte waqt items render karein
+window.openGatePassEditModal = async function(passId) {
+    const currentDb = getSupabaseClient();
+    if (!currentDb) return;
+
+    try {
+        const { data: pass, error } = await currentDb.from('gate_passes').select('*').eq('id', passId).single();
+        if (error) throw error;
+
+        // Populate Vendors Dropdown
+        const vendorSelect = document.getElementById('edit-gp-vendor');
+        vendorSelect.innerHTML = "";
+        const { data: vendors } = await currentDb.from('vendors').select('id, name');
+        if (vendors) {
+            vendors.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.id;
+                opt.text = v.name;
+                if (v.id == pass.vendor_id) opt.selected = true;
+                vendorSelect.appendChild(opt);
+            });
+        }
+
+        // Populate inputs
+        document.getElementById('edit-gp-id').value = pass.id;
+        document.getElementById('edit-gp-status').value = pass.status || 'Pending';
+        document.getElementById('edit-gp-total').value = pass.grand_total || 0;
+        document.getElementById('edit-gp-paid').value = pass.paid_amount || 0;
+        
+        // Render Items
+        const tableBody = document.getElementById('edit-gp-items-table-body');
+        tableBody.innerHTML = "";
+
+        const items = pass.items_json || [];
+        items.forEach((item, index) => {
+            // Yahan Category ko editable text bana diya taake purani category locked na rahe
+            tableBody.innerHTML += `
+                <tr class="edit-item-row" style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 5px;"><input type="text" class="edit-item-cat" value="${item.category || ''}" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px; background:#f8fafc;" readonly></td>
+                    <td style="padding: 8px 5px;"><input type="text" class="edit-item-name" value="${item.item_name || ''}" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;"></td>
+                    <td style="padding: 8px 5px;"><input type="number" class="edit-item-rate" value="${item.rate || 0}" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" oninput="recalculateEditModalGrandTotal()"></td>
+                    <td style="padding: 8px 5px;"><input type="number" class="edit-item-qty" value="${item.qty || 0}" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" oninput="recalculateEditModalGrandTotal()"></td>
+                    <td class="edit-item-row-total" style="padding: 8px 5px; text-align: right; font-weight: 600; color: #475569; min-width:100px;">
+                        Rs. ${parseFloat(item.total_amount || 0).toLocaleString()}
+                    </td>
+                </tr>
+            `;
+        });
+
+        const modal = document.getElementById('gatepass-edit-modal');
+        if (modal) modal.classList.add('open');
+
+    } catch (err) {
+        if (typeof showToast === 'function') showToast("Error loading pass: " + err.message, "error");
+        else alert("Error: " + err.message);
+    }
+}
+
+// 2. NEW FUNCTION: Table ke andar dynamic dropdowns ke sath nayi row inject karna
+window.addNewRowToEditModal = function() {
+    const tableBody = document.getElementById('edit-gp-items-table-body');
+    
+    // Dynamic Category Options compile karna humari productsData list se
+    let categoryOptions = '<option value="">-- Select --</option>';
+    if (typeof productsData === 'object') {
+        Object.keys(productsData).forEach(cat => {
+            categoryOptions += `<option value="${cat}">${cat}</option>`;
+        });
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = 'edit-item-row';
+    tr.style.borderBottom = '1px solid #e2e8f0';
+    
+    tr.innerHTML = `
+        <td style="padding: 8px 5px;">
+            <select class="edit-item-cat" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" onchange="updateEditModalItemDropdown(this)">
+                ${categoryOptions}
+            </select>
+        </td>
+        <td style="padding: 8px 5px;">
+            <select class="edit-item-name" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" onchange="updateEditModalItemPrice(this)">
+                <option value="">-- Choose Item --</option>
+            </select>
+        </td>
+        <td style="padding: 8px 5px;"><input type="number" class="edit-item-rate" value="0" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" oninput="recalculateEditModalGrandTotal()"></td>
+        <td style="padding: 8px 5px;"><input type="number" class="edit-item-qty" value="0" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" oninput="recalculateEditModalGrandTotal()"></td>
+        <td class="edit-item-row-total" style="padding: 8px 5px; text-align: right; font-weight: 600; color: #475569;">
+            Rs. 0
+        </td>
+    `;
+    tableBody.appendChild(tr);
+}
+
+// 3. Helper: Jab user category select kare to uske items dropdown load hon
+window.updateEditModalItemDropdown = function(catSelect) {
+    const row = catSelect.closest('.edit-item-row');
+    const itemSelect = row.querySelector('.edit-item-name');
+    const category = catSelect.value;
+    
+    itemSelect.innerHTML = '<option value="">-- Choose Item --</option>';
+    if (category && productsData[category]) {
+        productsData[category].forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.price; // Storing price as value for easy fetching
+            opt.text = p.name;
+            itemSelect.appendChild(opt);
+        });
+    }
+    row.querySelector('.edit-item-rate').value = 0;
+    recalculateEditModalGrandTotal();
+}
+
+// 4. Helper: Item dropdown choose karne pr automatic current price rate field me bhej dena
+window.updateEditModalItemPrice = function(itemSelect) {
+    const row = itemSelect.closest('.edit-item-row');
+    const rateInput = row.querySelector('.edit-item-rate');
+    const chosenPrice = parseFloat(itemSelect.value) || 0;
+    
+    rateInput.value = chosenPrice;
+    recalculateEditModalGrandTotal();
+}
+
+// 5. Grand Total Recalculate Logic (Keeps original rows & new drop-down rows tracked)
+window.recalculateEditModalGrandTotal = function() {
+    let newGrandTotal = 0;
+    const rows = document.querySelectorAll('#edit-gp-items-table-body .edit-item-row');
+    
+    rows.forEach(row => {
+        const rate = parseFloat(row.querySelector('.edit-item-rate').value) || 0;
+        const qty = parseFloat(row.querySelector('.edit-item-qty').value) || 0;
+        const rowTotal = rate * qty;
+        
+        row.querySelector('.edit-item-row-total').innerText = `Rs. ${rowTotal.toLocaleString()}`;
+        newGrandTotal += rowTotal;
+    });
+    
+    document.getElementById('edit-gp-total').value = newGrandTotal;
+}
+
+// 6. Save handler to push clean structural array back to Supabase
+window.saveGatePassEdit = async function(event) {
+    event.preventDefault();
+    const currentDb = getSupabaseClient();
+    if (!currentDb) return;
+
+    const passId = document.getElementById('edit-gp-id').value;
+    const vendorId = document.getElementById('edit-gp-vendor').value;
+    const status = document.getElementById('edit-gp-status').value;
+    const total = parseFloat(document.getElementById('edit-gp-total').value) || 0;
+    const paid = parseFloat(document.getElementById('edit-gp-paid').value) || 0;
+
+    let compiledItems = [];
+    const rows = document.querySelectorAll('#edit-gp-items-table-body .edit-item-row');
+    
+    rows.forEach(row => {
+        const catElement = row.querySelector('.edit-item-cat');
+        const nameElement = row.querySelector('.edit-item-name');
+        
+        // Handle dropdown elements vs static inputs
+        const category = catElement.value;
+        const item_name = nameElement.tagName === 'SELECT' ? 
+            (nameElement.options[nameElement.selectedIndex] ? nameElement.options[nameElement.selectedIndex].text : '') : 
+            nameElement.value;
+            
+        const rate = parseFloat(row.querySelector('.edit-item-rate').value) || 0;
+        const qty = parseFloat(row.querySelector('.edit-item-qty').value) || 0;
+        const total_amount = rate * qty;
+
+        if (category && item_name && qty > 0) {
+            compiledItems.push({ category, item_name, rate, qty, total_amount });
+        }
+    });
+
+    try {
+        const { error } = await currentDb
+            .from('gate_passes')
+            .update({
+                vendor_id: vendorId,
+                status: status,
+                grand_total: total,
+                paid_amount: paid,
+                items_json: compiledItems,
+                is_edited: true
+            })
+            .eq('id', passId);
+
+        if (error) throw error;
+
+        if (typeof showToast === 'function') showToast("MASHALLAH! Gate Pass updated with new products.", "success");
+        else alert("Gate Pass updated successfully.");
+
+        closeModal('gatepass-edit-modal');
+        loadInvoicesTable();
+        loadDashboardStats();
+
+    } catch (err) {
+        console.error(err);
+        alert("Update failed: " + err.message);
+    }
+}
+
+// Global variable to hold Chart Instance (taake refresh pr overlap na ho)
+let businessChartInstance = null;
+
+window.loadMonthlyBusinessChart = async function() {
+    const currentDb = getSupabaseClient();
+    const ctx = document.getElementById('businessStackChart');
+    if (!currentDb || !ctx) return;
+
+    try {
+        const { data: passes, error } = await currentDb
+            .from('gate_passes')
+            .select('created_at, grand_total');
+
+        if (error) throw error;
+
+        // Last 6 Months ka clean format structure ready karna
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let monthlyDataStructure = {};
+
+        // Pichle 6 mahino ki list auto-generate karna (Chronological Order)
+        for (let i = 5; i >= 0; i--) {
+            let d = new Date();
+            d.setMonth(d.getMonth() - i);
+            let key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthlyDataStructure[key] = {
+                label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`,
+                totalSales: 0
+            };
+        }
+
+        // Data ko cluster/group karna month keys ke mutabik
+        if (passes) {
+            passes.forEach(pass => {
+                if (!pass.created_at) return;
+                const dateObj = new Date(pass.created_at);
+                const passMonthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (monthlyDataStructure[passMonthKey]) {
+                    monthlyDataStructure[passMonthKey].totalSales += parseFloat(pass.grand_total || 0);
+                }
+            });
+        }
+
+        const chartLabels = Object.keys(monthlyDataStructure).map(k => monthlyDataStructure[k].label);
+        const businessVolumeData = Object.keys(monthlyDataStructure).map(k => monthlyDataStructure[k].totalSales);
+
+        if (businessChartInstance) {
+            businessChartInstance.destroy();
+        }
+
+        businessChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels, // Ab yahan lambi date ki jagah "Jun 2026" jese clean labels aayenge
+                datasets: [
+                    {
+                        label: 'Total Sales Volume',
+                        data: businessVolumeData,
+                        backgroundColor: 'rgba(16, 185, 129, 0.85)', 
+                        borderColor: '#10b981',
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        maxBarThickness: 45, // FIX: Bar ko zyada mota hone se rokega, aik pyari sleek look dega
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { font: { family: 'Segoe UI', weight: '600', size: 12 }, color: '#475569' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` Rs. ${parseFloat(context.raw).toLocaleString('en-PK')}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#64748b', font: { family: 'Segoe UI', weight: '600', size: 12 } }
+                    },
+                    y: {
+                        grid: { color: '#f1f5f9' },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Segoe UI', weight: '600', size: 11 },
+                            callback: function(value) { 
+                                return 'Rs. ' + value.toLocaleString('en-PK'); // FIX: Side bars pr Rs. aur commas lagaye
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error("Chart Rendering Error:", err);
+    }
 }
