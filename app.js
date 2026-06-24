@@ -31,9 +31,12 @@ document.addEventListener("DOMContentLoaded", () => {
         loadLiveVendors();
         loadDashboardStats();
         loadPendingPaymentsCenter();
-        
-        // Dynamic Chart Triggering Added Here
-        loadMonthlyBusinessChart(); 
+
+        // --- AUDIT REPORTING SYSTEM INITIALIZATION ---
+        initializeAuditMonthDropdown(); // Pehle dropdown dropdown options set karega
+        loadMonthlyProductBreakdownChart(); // Phr dynamic products audit table chart draw karega
+
+        loadMonthlyBusinessChart();
     }, 400);
 });
 
@@ -306,7 +309,7 @@ async function processGatePassEmission(event) {
     const vendorSelect = document.getElementById('gp-vendor-select');
     const vendorId = vendorSelect.value;
     const vendorName = vendorSelect.options[vendorSelect.selectedIndex].text;
-    
+
     // YAHAN CHANGE KIYA: Dropdown ki bajaye direct 'Pending' set kar diya
     const paymentStatus = 'Pending';
 
@@ -529,14 +532,14 @@ async function renderUnpaidPassesTableRows(vendorName) {
             let actualOwed = p.grand_total - (p.paid_amount || 0);
             if (actualOwed > 0) {
                 let displayNum = p.pass_serial ? p.pass_serial : p.id;
-                
+
                 // 1 Month (30 Days) Date Calculation Logic
                 const passDate = new Date(p.created_at);
                 const today = new Date();
                 const differenceInDays = Math.floor((today - passDate) / (1000 * 60 * 60 * 24));
-                
+
                 let actionButtonHtml = "";
-                
+
                 if (differenceInDays >= 30) {
                     // Agar 30 din ho chuke hain to decision check trigger karega click pr
                     actionButtonHtml = `
@@ -571,10 +574,10 @@ async function renderUnpaidPassesTableRows(vendorName) {
 // 1 Month Expiry Prompt Window Handle
 async function handleExpiredPassDecision(passId, vendorId, amountDue, displayNum, vendorName) {
     const msg = `Bhai! Gate Pass #GP-${displayNum} ko khade hue 1 mahina ho gaya hai.\n\n` +
-                `Aap kia karna chahte hain?\n` +
-                `1. ADVANCE SE KATNA HAIN? -> 'OK' Dabaein.\n` +
-                `2. PENDING MAIN HI KHADA RAKHNA HAIN? -> 'Cancel' Dabaein.`;
-                
+        `Aap kia karna chahte hain?\n` +
+        `1. ADVANCE SE KATNA HAIN? -> 'OK' Dabaein.\n` +
+        `2. PENDING MAIN HI KHADA RAKHNA HAIN? -> 'Cancel' Dabaein.`;
+
     if (confirm(msg)) {
         // User ne Advance cut select kiya (OK)
         await executeAdvanceDeduction(passId, vendorId, amountDue, displayNum, vendorName);
@@ -623,7 +626,7 @@ async function executeAdvanceDeduction(passId, vendorId, amountDue, displayNum, 
         if (passErr) throw passErr;
 
         showToast(`✅ MASHALLAH! Rs. ${amountDue.toLocaleString()} successfully vendor ke advance security account se deduct kar ke Gate Pass #GP-${displayNum} clear kar diya gaya hai!`);
-        
+
         // UI Refresh
         if (document.getElementById('vendor-passes-container')) document.getElementById('vendor-passes-container').style.display = 'none';
         loadDashboardStats();
@@ -947,7 +950,7 @@ async function loadInvoicesTable() {
     try {
         const { data, error } = await getSupabaseClient()
             .from('gate_passes')
-            .select('*, vendors(id, name)') 
+            .select('*, vendors(id, name)')
             .order('created_at', { ascending: false });
 
         tbody.innerHTML = "";
@@ -962,11 +965,11 @@ async function loadInvoicesTable() {
         }
 
         data.forEach(inv => {
-            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5,'0') : 'N/A'}`;
+            const invoiceNum = inv.pass_serial || inv.pass_number || `GP-${inv.id ? inv.id.toString().padStart(5, '0') : 'N/A'}`;
             const vendorNameDisplay = inv.vendors ? inv.vendors.name : (inv.vendor_id || 'N/A');
-            
+
             // CHECK LOGIC HERE: Agar items_json ya comment string mein 'edited' ka surag mile to tag dikhaye
-            const editCommentHtml = inv.is_edited || inv.pass_serial?.includes('(Edit)') ? 
+            const editCommentHtml = inv.is_edited || inv.pass_serial?.includes('(Edit)') ?
                 `<br><span style="font-size:11px; color:#ef4444; font-weight:bold; background:#fee2e2; padding:2px 6px; border-radius:4px; margin-top:4px; display:inline-block;">(Edit)</span>` : '';
 
             tbody.innerHTML += `
@@ -1012,20 +1015,24 @@ if (typeof switchTab !== 'function') {
         const link = document.querySelector(`.nav-links a[onclick*="${tabId}"]`);
         if (link) link.classList.add('active');
 
+        // --- DYNAMIC DATA LOAD TRIGGERS ---
         if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
         if (tabId === 'products') setTimeout(loadProductsTable, 300);
+        if (tabId === 'reports') setTimeout(initializeReportsDropdowns, 300); // FIX: Reports tab trigger added
     };
 } else {
     const oldSwitch = switchTab;
     switchTab = function (tabId) {
         oldSwitch(tabId);
+        // --- DYNAMIC DATA LOAD TRIGGERS ---
         if (tabId === 'invoices') setTimeout(loadInvoicesTable, 300);
         if (tabId === 'products') setTimeout(loadProductsTable, 300);
+        if (tabId === 'reports') setTimeout(initializeReportsDropdowns, 300); // FIX: Reports tab trigger added
     };
 }
 
 // Global Toast Notification System
-window.showToast = function(message, type = 'success') {
+window.showToast = function (message, type = 'success') {
     // Agar pehle se container nahi bana hua to banao
     let container = document.querySelector('.toast-container');
     if (!container) {
@@ -1037,7 +1044,7 @@ window.showToast = function(message, type = 'success') {
     // Toast element create karein
     const toast = document.createElement('div');
     toast.className = `custom-toast ${type}`;
-    
+
     // Icon type ke mutabik set karein
     let icon = '<i class="fa-solid fa-circle-check"></i>';
     if (type === 'error') icon = '<i class="fa-solid fa-circle-xmark"></i>';
@@ -1055,7 +1062,7 @@ window.showToast = function(message, type = 'success') {
 }
 
 // 1. Modal open karte waqt items render karein
-window.openGatePassEditModal = async function(passId) {
+window.openGatePassEditModal = async function (passId) {
     const currentDb = getSupabaseClient();
     if (!currentDb) return;
 
@@ -1082,7 +1089,7 @@ window.openGatePassEditModal = async function(passId) {
         document.getElementById('edit-gp-status').value = pass.status || 'Pending';
         document.getElementById('edit-gp-total').value = pass.grand_total || 0;
         document.getElementById('edit-gp-paid').value = pass.paid_amount || 0;
-        
+
         // Render Items
         const tableBody = document.getElementById('edit-gp-items-table-body');
         tableBody.innerHTML = "";
@@ -1113,9 +1120,9 @@ window.openGatePassEditModal = async function(passId) {
 }
 
 // 2. NEW FUNCTION: Table ke andar dynamic dropdowns ke sath nayi row inject karna
-window.addNewRowToEditModal = function() {
+window.addNewRowToEditModal = function () {
     const tableBody = document.getElementById('edit-gp-items-table-body');
-    
+
     // Dynamic Category Options compile karna humari productsData list se
     let categoryOptions = '<option value="">-- Select --</option>';
     if (typeof productsData === 'object') {
@@ -1127,7 +1134,7 @@ window.addNewRowToEditModal = function() {
     const tr = document.createElement('tr');
     tr.className = 'edit-item-row';
     tr.style.borderBottom = '1px solid #e2e8f0';
-    
+
     tr.innerHTML = `
         <td style="padding: 8px 5px;">
             <select class="edit-item-cat" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px;" onchange="updateEditModalItemDropdown(this)">
@@ -1149,11 +1156,11 @@ window.addNewRowToEditModal = function() {
 }
 
 // 3. Helper: Jab user category select kare to uske items dropdown load hon
-window.updateEditModalItemDropdown = function(catSelect) {
+window.updateEditModalItemDropdown = function (catSelect) {
     const row = catSelect.closest('.edit-item-row');
     const itemSelect = row.querySelector('.edit-item-name');
     const category = catSelect.value;
-    
+
     itemSelect.innerHTML = '<option value="">-- Choose Item --</option>';
     if (category && productsData[category]) {
         productsData[category].forEach(p => {
@@ -1168,34 +1175,34 @@ window.updateEditModalItemDropdown = function(catSelect) {
 }
 
 // 4. Helper: Item dropdown choose karne pr automatic current price rate field me bhej dena
-window.updateEditModalItemPrice = function(itemSelect) {
+window.updateEditModalItemPrice = function (itemSelect) {
     const row = itemSelect.closest('.edit-item-row');
     const rateInput = row.querySelector('.edit-item-rate');
     const chosenPrice = parseFloat(itemSelect.value) || 0;
-    
+
     rateInput.value = chosenPrice;
     recalculateEditModalGrandTotal();
 }
 
 // 5. Grand Total Recalculate Logic (Keeps original rows & new drop-down rows tracked)
-window.recalculateEditModalGrandTotal = function() {
+window.recalculateEditModalGrandTotal = function () {
     let newGrandTotal = 0;
     const rows = document.querySelectorAll('#edit-gp-items-table-body .edit-item-row');
-    
+
     rows.forEach(row => {
         const rate = parseFloat(row.querySelector('.edit-item-rate').value) || 0;
         const qty = parseFloat(row.querySelector('.edit-item-qty').value) || 0;
         const rowTotal = rate * qty;
-        
+
         row.querySelector('.edit-item-row-total').innerText = `Rs. ${rowTotal.toLocaleString()}`;
         newGrandTotal += rowTotal;
     });
-    
+
     document.getElementById('edit-gp-total').value = newGrandTotal;
 }
 
 // 6. Save handler to push clean structural array back to Supabase
-window.saveGatePassEdit = async function(event) {
+window.saveGatePassEdit = async function (event) {
     event.preventDefault();
     const currentDb = getSupabaseClient();
     if (!currentDb) return;
@@ -1208,17 +1215,17 @@ window.saveGatePassEdit = async function(event) {
 
     let compiledItems = [];
     const rows = document.querySelectorAll('#edit-gp-items-table-body .edit-item-row');
-    
+
     rows.forEach(row => {
         const catElement = row.querySelector('.edit-item-cat');
         const nameElement = row.querySelector('.edit-item-name');
-        
+
         // Handle dropdown elements vs static inputs
         const category = catElement.value;
-        const item_name = nameElement.tagName === 'SELECT' ? 
-            (nameElement.options[nameElement.selectedIndex] ? nameElement.options[nameElement.selectedIndex].text : '') : 
+        const item_name = nameElement.tagName === 'SELECT' ?
+            (nameElement.options[nameElement.selectedIndex] ? nameElement.options[nameElement.selectedIndex].text : '') :
             nameElement.value;
-            
+
         const rate = parseFloat(row.querySelector('.edit-item-rate').value) || 0;
         const qty = parseFloat(row.querySelector('.edit-item-qty').value) || 0;
         const total_amount = rate * qty;
@@ -1259,7 +1266,7 @@ window.saveGatePassEdit = async function(event) {
 // Global variable to hold Chart Instance (taake refresh pr overlap na ho)
 let businessChartInstance = null;
 
-window.loadMonthlyBusinessChart = async function() {
+window.loadMonthlyBusinessChart = async function () {
     const currentDb = getSupabaseClient();
     const ctx = document.getElementById('businessStackChart');
     if (!currentDb || !ctx) return;
@@ -1292,7 +1299,7 @@ window.loadMonthlyBusinessChart = async function() {
                 if (!pass.created_at) return;
                 const dateObj = new Date(pass.created_at);
                 const passMonthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-                
+
                 if (monthlyDataStructure[passMonthKey]) {
                     monthlyDataStructure[passMonthKey].totalSales += parseFloat(pass.grand_total || 0);
                 }
@@ -1314,7 +1321,7 @@ window.loadMonthlyBusinessChart = async function() {
                     {
                         label: 'Total Sales Volume',
                         data: businessVolumeData,
-                        backgroundColor: 'rgba(16, 185, 129, 0.85)', 
+                        backgroundColor: 'rgba(16, 185, 129, 0.85)',
                         borderColor: '#10b981',
                         borderWidth: 1.5,
                         borderRadius: 6,
@@ -1333,7 +1340,7 @@ window.loadMonthlyBusinessChart = async function() {
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 return ` Rs. ${parseFloat(context.raw).toLocaleString('en-PK')}`;
                             }
                         }
@@ -1349,7 +1356,7 @@ window.loadMonthlyBusinessChart = async function() {
                         ticks: {
                             color: '#64748b',
                             font: { family: 'Segoe UI', weight: '600', size: 11 },
-                            callback: function(value) { 
+                            callback: function (value) {
                                 return 'Rs. ' + value.toLocaleString('en-PK'); // FIX: Side bars pr Rs. aur commas lagaye
                             }
                         }
@@ -1361,4 +1368,457 @@ window.loadMonthlyBusinessChart = async function() {
     } catch (err) {
         console.error("Chart Rendering Error:", err);
     }
+}
+
+// Global variable to hold Product Audit Chart Instance
+let productAuditChartInstance = null;
+
+// 1. Dropdown mein pichle 6 mahine auto-populate karne ka function
+window.initializeAuditMonthDropdown = function () {
+    const monthSelect = document.getElementById('audit-month-select');
+    if (!monthSelect) return;
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    monthSelect.innerHTML = "";
+
+    // Aaj se pichle 6 mahine generate karein
+    for (let i = 0; i < 6; i++) {
+        let d = new Date();
+        d.setMonth(d.getMonth() - i);
+
+        let valueKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; // Format: YYYY-MM
+        let textDisplay = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+
+        const opt = document.createElement('option');
+        opt.value = valueKey;
+        opt.text = textDisplay;
+        monthSelect.appendChild(opt);
+    }
+}
+
+// 2. Selected Month ke mutabik items data fetch kar ke Chart render karne ka core logic
+window.loadMonthlyProductBreakdownChart = async function () {
+    const currentDb = getSupabaseClient();
+    const ctx = document.getElementById('productAuditChart');
+    const monthSelect = document.getElementById('audit-month-select');
+
+    if (!currentDb || !ctx || !monthSelect) return;
+
+    const selectedMonthKey = monthSelect.value; // Get YYYY-MM selected by user
+
+    try {
+        const { data: passes, error } = await currentDb
+            .from('gate_passes')
+            .select('created_at, items_json');
+
+        if (error) throw error;
+
+        let productSalesSummary = {};
+
+        if (passes) {
+            passes.forEach(pass => {
+                if (!pass.created_at || !pass.items_json) return;
+
+                const dateObj = new Date(pass.created_at);
+                const passMonthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+
+                if (passMonthKey === selectedMonthKey) {
+                    const items = Array.isArray(pass.items_json) ? pass.items_json : [];
+                    items.forEach(item => {
+                        const pName = item.item_name || 'Unknown Item';
+                        const pTotal = parseFloat(item.total_amount || 0);
+
+                        if (!productSalesSummary[pName]) {
+                            productSalesSummary[pName] = 0;
+                        }
+                        productSalesSummary[pName] += pTotal;
+                    });
+                }
+            });
+        }
+
+        const productLabels = Object.keys(productSalesSummary);
+        const productDataValues = Object.values(productSalesSummary);
+
+        if (productAuditChartInstance) {
+            productAuditChartInstance.destroy();
+        }
+
+        if (productLabels.length === 0) {
+            productLabels.push("No Data Available");
+            productDataValues.push(0);
+        }
+
+        // Upgraded Vertical Bar Chart
+        productAuditChartInstance = new Chart(ctx, {
+            type: 'bar', // Type bar hi rahega
+            data: {
+                labels: productLabels,
+                datasets: [{
+                    label: 'Product Sales Breakdown (Rs.)',
+                    data: productDataValues,
+                    backgroundColor: 'rgba(59, 130, 246, 0.85)', // Premium blue for products
+                    borderColor: '#3b82f6',
+                    borderWidth: 1.5,
+                    borderRadius: 6, // Sleek modern rounded corners
+                    maxBarThickness: 45 // Bars ko ek limit me rakhega
+                }]
+            },
+            options: {
+                // FIX: 'indexAxis: y' ko khatam kar diya taake bars strictly vertical khari hon!
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                return ` Total Sales: Rs. ${parseFloat(context.raw).toLocaleString('en-PK')}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#475569',
+                            font: { family: 'Segoe UI', weight: '600', size: 12 }
+                        }
+                    },
+                    y: {
+                        grid: { color: '#f1f5f9' },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Segoe UI', weight: '600', size: 11 },
+                            callback: function (value) { return 'Rs. ' + value.toLocaleString('en-PK'); }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error("Audit Chart Engine Error:", err);
+    }
+}
+
+// --- CENTRAL AUDIT REPORTING SYSTEM ENGINE ---
+let cachedMonthlyReportData = []; // State holding for monthly logs
+let activeVendorReportContext = { vendorName: '', monthLabel: '', items: [], grandTotal: 0 };
+
+// 1. Initialize dropdown options specifically inside Reports tab layout
+window.initializeReportsDropdowns = async function () {
+    const monthSelect = document.getElementById('report-month-select');
+    const vendorSelect = document.getElementById('report-vendor-select');
+    const currentDb = getSupabaseClient();
+    if (!currentDb) return;
+
+    // Populate Months (Last 6 Months)
+    if (monthSelect) {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        monthSelect.innerHTML = '<option value="">-- Choose Audit Month --</option>';
+        for (let i = 0; i < 6; i++) {
+            let d = new Date();
+            d.setMonth(d.getMonth() - i);
+            let val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            let txt = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+            let opt = new Option(txt, val);
+            monthSelect.add(opt);
+        }
+    }
+
+    // Populate Active Registered Vendors
+    if (vendorSelect) {
+        vendorSelect.innerHTML = '<option value="">-- Select Corporate Vendor --</option>';
+        const { data: vendors } = await currentDb.from('vendors').select('id, name');
+        if (vendors) {
+            vendors.forEach(v => {
+                vendorSelect.add(new Option(v.name, v.id));
+            });
+        }
+    }
+}
+
+// ==================== REPORT 1: MONTHLY SALES PROCESSORS ====================
+window.generateMonthlySalesReport = async function () {
+    const currentDb = getSupabaseClient();
+    const targetMonth = document.getElementById('report-month-select').value;
+    if (!targetMonth) {
+        if (typeof showToast === 'function') showToast("Kripya pehle mahina select karein!", "warning");
+        return;
+    }
+
+    try {
+        const { data: passes, error } = await currentDb.from('gate_passes').select('created_at, items_json');
+        if (error) throw error;
+
+        let trackingMatrix = {};
+        let runningGrandTotal = 0;
+
+        if (passes) {
+            passes.forEach(p => {
+                if (!p.created_at || !p.items_json) return;
+                const dObj = new Date(p.created_at);
+                const passMonthKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+
+                if (passMonthKey === targetMonth) {
+                    const items = Array.isArray(p.items_json) ? p.items_json : [];
+                    items.forEach(item => {
+                        const name = item.item_name || 'Unknown';
+                        const qty = parseFloat(item.qty || 0);
+                        const total = parseFloat(item.total_amount || 0);
+
+                        if (!trackingMatrix[name]) {
+                            trackingMatrix[name] = { qty: 0, total: 0 };
+                        }
+                        trackingMatrix[name].qty += qty;
+                        trackingMatrix[name].total += total;
+                        runningGrandTotal += total;
+                    });
+                }
+            });
+        }
+
+        // Render Table Body UI
+        const tbody = document.getElementById('monthly-report-table-body');
+        tbody.innerHTML = "";
+        cachedMonthlyReportData = []; // Reset state
+
+        const keys = Object.keys(trackingMatrix);
+        if (keys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:30px;color:#94a3b8;">Is mahine koi sales records nahi milein.</td></tr>`;
+            document.getElementById('monthly-report-result-area').style.display = "none";
+            return;
+        }
+
+        keys.forEach(k => {
+            cachedMonthlyReportData.push({ name: k, qty: trackingMatrix[k].qty, total: trackingMatrix[k].total });
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding:10px; font-weight:600; color:#334155;">${k}</td>
+                    <td style="padding:10px; text-align:center; color:#475569;">${trackingMatrix[k].qty}</td>
+                    <td style="padding:10px; text-align:right; font-weight:700; color:#0f766e;">Rs. ${trackingMatrix[k].total.toLocaleString()}</td>
+                </tr>`;
+        });
+
+        document.getElementById('monthly-report-grand-total').innerText = `Rs. ${runningGrandTotal.toLocaleString()}`;
+        document.getElementById('monthly-report-result-area').style.display = "block";
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// Report 1: PDF EXPORTER WITH EXCELLENT CORPORATE HEADER LAYOUT
+window.downloadMonthlyReportPDF = function () {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const monthLabel = document.getElementById('report-month-select').options[document.getElementById('report-month-select').selectedIndex].text;
+
+    // Premium Branding Header Box Area Design
+    doc.setFillColor(30, 41, 59); // Charcoal Sidebar theme fill Color
+    doc.rect(0, 0, 210, 38, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text("SAYLANI MEAT DEPARTMENT", 14, 16);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setFillColor(16, 185, 129); // Accent line
+    doc.rect(14, 20, 50, 1.5, 'F');
+    doc.text(`Official Audit Summary Report — Monthly Allocation Matrix`, 14, 26);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Target Audit Period: ${monthLabel}`, 14, 32);
+
+    // Footer Metas metadata positioning right-aligned
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Generated Date: ${new Date().toLocaleDateString('en-PK')}`, 150, 16);
+    doc.text(`Status: Verified Official`, 150, 22);
+
+    // Constructing Core Data Rows Setup
+    let dynamicRows = [];
+    let netSum = 0;
+    cachedMonthlyReportData.forEach(item => {
+        netSum += item.total;
+        dynamicRows.push([item.name, item.qty, `Rs. ${item.total.toLocaleString()}`]);
+    });
+    dynamicRows.push([{ content: 'Grand Total Volume Accumulated:', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold', fillColor: [236, 253, 245] } }, { content: `Rs. ${netSum.toLocaleString()}`, styles: { fontStyle: 'bold', fillColor: [236, 253, 245], textColor: [6, 95, 70] } }]);
+
+    doc.autoTable({
+        startY: 45,
+        head: [['Product Allocation Description', 'Net Quantity (Units)', 'Total Computed Sales Volume']],
+        body: dynamicRows,
+        theme: 'striped',
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { font: 'helvetica', fontSize: 10, cellPadding: 5 }
+    });
+
+    doc.save(`Monthly-Audit-Report-${monthLabel.replace(' ', '-')}.pdf`);
+}
+
+
+// ==================== REPORT 2: VENDOR WISE LEDGER BREAKDOWNS ====================
+window.loadActiveVendorMonths = async function () {
+    const currentDb = getSupabaseClient();
+    const vendorId = document.getElementById('report-vendor-select').value;
+    const container = document.getElementById('vendor-months-container');
+    document.getElementById('vendor-deep-breakdown-area').style.display = "none";
+
+    if (!vendorId) {
+        container.innerHTML = `<p style="text-align: center; color: #94a3b8; font-size: 13px; padding: 20px;">Select a vendor to audit monthly statement breakdown.</p>`;
+        return;
+    }
+
+    container.innerHTML = `<p style="text-align:center;font-size:13px;color:#64748b;padding:15px;"><i class="fa-solid fa-spinner fa-spin"></i> Indexing statements matrix...</p>`;
+
+    try {
+        // Fetch all passes related to this single active vendor context
+        const { data: passes, error } = await currentDb.from('gate_passes').select('created_at, items_json, grand_total').eq('vendor_id', vendorId);
+        if (error) throw error;
+
+        if (!passes || passes.length === 0) {
+            container.innerHTML = `<p style="text-align:center;font-size:13px;color:#ef4444;padding:15px;font-weight:600;">Is vendor ka koi gate pass database me majood nahi hai.</p>`;
+            return;
+        }
+
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let structuredMonths = {};
+
+        // Loop passes to group totals inside localized month buckets
+        passes.forEach(p => {
+            if (!p.created_at) return;
+            const d = new Date(p.created_at);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+            if (!structuredMonths[key]) {
+                structuredMonths[key] = { label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`, rawItems: [], totalVolume: 0 };
+            }
+
+            structuredMonths[key].totalVolume += parseFloat(p.grand_total || 0);
+            const items = Array.isArray(p.items_json) ? p.items_json : [];
+            items.forEach(i => structuredMonths[key].rawItems.push(i));
+        });
+
+        // Clear wrapper container and map active action rows layout
+        container.innerHTML = "";
+        Object.keys(structuredMonths).forEach(monthKey => {
+            const mData = structuredMonths[monthKey];
+            const divRow = document.createElement('div');
+            divRow.style = "display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 8px; transition: 0.2s;";
+            divRow.innerHTML = `
+                <div>
+                    <span style="font-weight:700; color:#1e293b; font-size:13px;">${mData.label}</span>
+                    <br><span style="font-size:11px; color:#64748b;">Accumulated Business: Rs. ${mData.totalVolume.toLocaleString()}</span>
+                </div>
+                <button type="button" class="btn-primary" style="padding:5px 10px; font-size:12px; background:#2563eb;" 
+                    onclick="openVendorDeepAuditReport('${monthKey}', '${mData.label}', ${JSON.stringify(mData.rawItems).replace(/"/g, '&quot;')}, ${mData.totalVolume})">
+                    <i class="fa-solid fa-folder-open"></i> View Items
+                </button>
+            `;
+            container.appendChild(divRow);
+        });
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// Render dynamic sub-nested deep layout on specific row call triggers
+window.openVendorDeepAuditReport = function (monthKey, monthLabel, itemsList, grandTotal) {
+    const vSelect = document.getElementById('report-vendor-select');
+    const vendorName = vSelect.options[vSelect.selectedIndex].text;
+
+    // Populating localized contexts states
+    activeVendorReportContext = { vendorName, monthLabel, items: itemsList, grandTotal };
+
+    document.getElementById('vendor-deep-title').innerHTML = `<i class="fa-solid fa-receipt"></i> Items Breakdown for ${vendorName} (${monthLabel})`;
+
+    const tbody = document.getElementById('vendor-deep-table-body');
+    tbody.innerHTML = "";
+
+    // Cluster multiple gate pass items matching same products names together
+    let clustered = {};
+    itemsList.forEach(item => {
+        const name = item.item_name || 'N/A';
+        const rate = parseFloat(item.rate || 0);
+        const qty = parseFloat(item.qty || 0);
+        const total = parseFloat(item.total_amount || 0);
+
+        if (!clustered[name]) {
+            clustered[name] = { qty: 0, rate: rate, total: 0 };
+        }
+        clustered[name].qty += qty;
+        clustered[name].total += total;
+    });
+
+    Object.keys(clustered).forEach(name => {
+        tbody.innerHTML += `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding:6px 8px; font-weight:600; color:#334155;">${name}</td>
+                <td style="padding:6px 8px; text-align:center; color:#475569;">${clustered[name].qty}</td>
+                <td style="padding:6px 8px; text-align:right; color:#475569;">Rs. ${clustered[name].rate.toLocaleString()}</td>
+                <td style="padding:6px 8px; text-align:right; font-weight:700; color:#1d4ed8;">Rs. ${clustered[name].total.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('vendor-deep-grand-total').innerText = `Rs. ${grandTotal.toLocaleString()}`;
+    document.getElementById('vendor-deep-breakdown-area').style.display = "block";
+}
+
+// Report 2: PRINT INDEPENDENT VENDOR MONTHLY STATEMENT PDF
+window.downloadVendorMonthlyReportPDF = function () {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const ctx = activeVendorReportContext;
+
+    if (!ctx.vendorName) return;
+
+    // Blue corporate theme header block styling for specific corporate accounts ledgers
+    doc.setFillColor(30, 41, 59);
+    doc.rect(0, 0, 210, 38, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("SAYLANI MEAT CONTEXT ERP", 14, 16);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setFillColor(37, 99, 235); // Blue Accent line
+    doc.rect(14, 20, 50, 1.5, 'F');
+    doc.text(`Corporate Vendor Business Ledger Summary Account Statement`, 14, 26);
+
+    doc.setFont("helvetica", "bold");
+    doc.text(`Vendor: ${ctx.vendorName}  |  Period: ${ctx.monthLabel}`, 14, 32);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Print Date: ${new Date().toLocaleDateString('en-PK')}`, 150, 16);
+    doc.text(`Account Token: VND-${Math.floor(Math.random() * 90000) + 10000}`, 150, 22);
+
+    let rows = [];
+    let clustered = {};
+    ctx.items.forEach(item => {
+        const name = item.item_name || 'N/A';
+        if (!clustered[name]) clustered[name] = { qty: 0, rate: item.rate, total: 0 };
+        clustered[name].qty += parseFloat(item.qty || 0);
+        clustered[name].total += parseFloat(item.total_amount || 0);
+    });
+
+    Object.keys(clustered).forEach(k => {
+        rows.push([k, clustered[k].qty, `Rs. ${parseFloat(clustered[k].rate).toLocaleString()}`, `Rs. ${clustered[k].total.toLocaleString()}`]);
+    });
+    rows.push([{ content: 'Net Statement Grand Total Volume:', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fillColor: [239, 246, 255] } }, { content: `Rs. ${ctx.grandTotal.toLocaleString()}`, styles: { fontStyle: 'bold', fillColor: [239, 246, 255], textColor: [29, 78, 216] } }]);
+
+    doc.autoTable({
+        startY: 45,
+        head: [['Item Description Name', 'Net Stock Units Supplied', 'Agreed Unit Rate', 'Net Amount (PKR)']],
+        body: rows,
+        theme: 'grid',
+        headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 4 }
+    });
+
+    doc.save(`Statement-${ctx.vendorName.replace(/ /g, '-')}-${ctx.monthLabel.replace(/ /g, '-')}.pdf`);
 }

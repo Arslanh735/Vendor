@@ -36,6 +36,9 @@
                 <a href="#" onclick="switchTab('invoices')"><i class="fa-solid fa-file-invoice"></i> Invoices</a>
                 <a href="#" onclick="switchTab('gatepass')"><i class="fa-solid fa-ticket"></i> Gate Pass Gen</a>
                 <a href="#" onclick="switchTab('products')"><i class="fa-solid fa-layer-group"></i> Product Rates</a>
+                <a href="#" onclick="switchTab('reports')">
+                    <i class="fa-solid fa-file-contract"></i> Reports Center
+                </a>
                 <a href="#" id="admin-nav" onclick="switchTab('users')"><i class="fa-solid fa-user-shield"></i> User
                     Control</a>
             </nav>
@@ -97,9 +100,9 @@
                         </div>
                     </div>
                     <div class="dashboard-grid"
-                        style="margin-top: 25px; display: grid; grid-template-columns: 1fr; gap: 20px;">
+                        style="margin-bottom: 25px; margin-top: 25px; display: grid; grid-template-columns: 1fr; gap: 20px;">
                         <div class="stat-card"
-                            style="background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: var(--shadow);">
+                            style="background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: var(--shadow); display: flex; justify-content: center; flex-direction: column;">
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">
                                 <h3 style="color: #1e293b; font-size: 16px; font-weight: 700;">
@@ -111,6 +114,39 @@
                             </div>
                             <div style="position: relative; height: 320px; width: 100%;">
                                 <canvas id="businessStackChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid"
+                        style="margin-bottom: 25px; display: grid; grid-template-columns: 1fr; gap: 20px;">
+                        <div class="stat-card"
+                            style="background: #ffffff; padding: 25px; border-radius: 12px; box-shadow: var(--shadow); display: flex; justify-content: center; flex-direction: column;">
+
+                            <div
+                                style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <h3 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0;">
+                                        <i class="fa-solid fa-boxes-stacked"
+                                            style="color: #3b82f6; margin-right: 8px;"></i>
+                                        Monthly Product Wise Sales Breakdown
+                                    </h3>
+                                    <span
+                                        style="font-size: 12px; font-weight: 600; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 20px;">Real-time</span>
+                                </div>
+
+                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
+                                    <label style="font-size: 13px; font-weight: 600; color: #64748b;"><i
+                                            class="fa-solid fa-filter"></i> Filter Month:</label>
+                                    <select id="audit-month-select"
+                                        style="padding: 6px 16px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 600; color: #334155; background: #f8fafc; cursor: pointer;"
+                                        onchange="loadMonthlyProductBreakdownChart()">
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="productAuditChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -383,6 +419,161 @@
                             </thead>
                             <tbody id="invoices-table-body"></tbody>
                         </table>
+                    </div>
+                </section>
+
+                <section id="reports-tab" class="tab-content">
+                    <div class="tab-header"
+                        style="margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px;">
+                        <h2><i class="fa-solid fa-chart-line" style="color: #2563eb;"></i> Strategic Audit & Reports
+                            Center</h2>
+                        <p style="color: #64748b; font-size: 14px; margin-top: 5px;">Generate professional summary
+                            ledger break-downs and printable official PDFs.</p>
+                    </div>
+
+                    <div style="display: block; width: 100%; box-sizing: border-box;">
+
+                        <div class="stat-card"
+                            style="background: #ffffff; padding: 25px; border-radius: 12px; box-shadow: var(--shadow); width: 100%; box-sizing: border-box; margin-bottom: 30px; display: block;">
+
+                            <div
+                                style="border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px; display: block;">
+                                <h3 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0;">
+                                    <i class="fa-solid fa-calendar-days" style="color: #10b981; margin-right: 8px;"></i>
+                                    1. Monthly Product Sales Ledger
+                                </h3>
+                            </div>
+
+                            <div style="display: block; max-width: 450px; margin-bottom: 20px;">
+                                <label
+                                    style="font-size: 13px; font-weight: 700; color: #475569; display: block; margin-bottom: 8px;"><i
+                                        class="fa-solid fa-filter"></i> Select Search Month:</label>
+                                <select id="report-month-select"
+                                    style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; color: #334155; background: #f8fafc; margin-bottom: 12px; display: block;"></select>
+                                <button class="btn-primary"
+                                    style="background: #10b981; padding: 10px 20px; width: 100%; display: block;"
+                                    onclick="generateMonthlySalesReport()">
+                                    <i class="fa-solid fa-magnifying-glass"></i> Fetch Data
+                                </button>
+                            </div>
+
+                            <div id="monthly-report-result-area"
+                                style="display:none; margin-top: 25px; border-top: 2px dashed #cbd5e1; padding-top: 20px; width: 100%;">
+                                <div
+                                    style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 15px; background: #ffffff; display: block;">
+                                    <table
+                                        style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 100%;">
+                                        <thead style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                                            <tr>
+                                                <th
+                                                    style="padding: 12px; text-align: left; color: #475569; font-weight: 700;">
+                                                    Item Name</th>
+                                                <th
+                                                    style="padding: 12px; text-align: center; color: #475569; font-weight: 700; width: 150px;">
+                                                    Total Qty</th>
+                                                <th
+                                                    style="padding: 12px; text-align: right; color: #475569; font-weight: 700; width: 200px;">
+                                                    Total Volume</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="monthly-report-table-body"></tbody>
+                                    </table>
+                                </div>
+
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; padding: 14px 20px; border-radius: 8px; border: 1px solid #a7f3d0; margin-bottom: 15px; box-sizing: border-box;">
+                                    <span style="font-weight: 700; color: #065f46; font-size: 14px;">Grand Total Net
+                                        Revenue:</span>
+                                    <span id="monthly-report-grand-total"
+                                        style="font-weight: 800; color: #065f46; font-size: 17px;">Rs. 0</span>
+                                </div>
+                                <button class="btn-primary"
+                                    style="width: 100%; padding: 12px; background: #059669; font-size: 14px; font-weight: 600; display: block;"
+                                    onclick="downloadMonthlyReportPDF()">
+                                    <i class="fa-solid fa-file-pdf"></i> Download Official PDF Report
+                                </button>
+                            </div>
+                        </div>
+
+
+                        <div class="stat-card"
+                            style="background: #ffffff; padding: 25px; border-radius: 12px; box-shadow: var(--shadow); width: 100%; box-sizing: border-box; display: block;">
+
+                            <div
+                                style="border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px; display: block;">
+                                <h3 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0;">
+                                    <i class="fa-solid fa-user-tie" style="color: #2563eb; margin-right: 8px;"></i> 2.
+                                    Vendor Business Ledger (Deep Audit)
+                                </h3>
+                            </div>
+
+                            <div style="display: block; max-width: 450px; margin-bottom: 20px;">
+                                <label
+                                    style="font-size: 13px; font-weight: 700; color: #475569; display: block; margin-bottom: 8px;"><i
+                                        class="fa-solid fa-user"></i> Select Corporate Vendor:</label>
+                                <select id="report-vendor-select"
+                                    style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; color: #334155; background: #f8fafc; display: block;"
+                                    onchange="loadActiveVendorMonths()"></select>
+                            </div>
+
+                            <div style="display: block; margin-bottom: 20px; max-width: 450px;">
+                                <label
+                                    style="font-size: 13px; font-weight: 700; color: #475569; display: block; margin-bottom: 10px;"><i
+                                        class="fa-solid fa-calendar-check"></i> Available Active Months:</label>
+                                <div id="vendor-months-container"
+                                    style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                                    <p
+                                        style="color: #94a3b8; font-size: 13px; padding: 15px; margin: 0; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                                        Select a corporate vendor from dropdown to audit monthly statements.</p>
+                                </div>
+                            </div>
+
+                            <div id="vendor-deep-breakdown-area"
+                                style="display:none; margin-top: 25px; border-top: 2px dashed #cbd5e1; padding-top: 20px; width: 100%; display: block;">
+                                <h4 id="vendor-deep-title"
+                                    style="color:#1e293b; font-size:14px; font-weight:700; margin-bottom:15px; background: #f1f5f9; padding: 10px 14px; border-radius: 6px; display: block; width: 100%; box-sizing: border-box;">
+                                </h4>
+
+                                <div
+                                    style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 15px; background: #ffffff; display: block;">
+                                    <table
+                                        style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 100%;">
+                                        <thead style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                                            <tr>
+                                                <th
+                                                    style="padding: 12px; text-align: left; color: #475569; font-weight: 700;">
+                                                    Item Name</th>
+                                                <th
+                                                    style="padding: 12px; text-align: center; color: #475569; font-weight: 700; width: 100px;">
+                                                    Qty</th>
+                                                <th
+                                                    style="padding: 12px; text-align: right; color: #475569; font-weight: 700; width: 150px;">
+                                                    Unit Rate</th>
+                                                <th
+                                                    style="padding: 12px; text-align: right; color: #475569; font-weight: 700; width: 180px;">
+                                                    Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="vendor-deep-table-body"></tbody>
+                                    </table>
+                                </div>
+
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; background: #eff6ff; padding: 14px 20px; border-radius: 8px; border: 1px solid #bfdbfe; margin-bottom: 15px; box-sizing: border-box;">
+                                    <span style="font-weight: 700; color: #1e40af; font-size: 14px;">Month Statement
+                                        Total:</span>
+                                    <span id="vendor-deep-grand-total"
+                                        style="font-weight: 800; color: #1e40af; font-size: 16px;">Rs. 0</span>
+                                </div>
+
+                                <button class="btn-primary"
+                                    style="width: 100%; padding: 12px; background: #1d4ed8; font-size: 14px; font-weight: 600; display: block;"
+                                    onclick="downloadVendorMonthlyReportPDF()">
+                                    <i class="fa-solid fa-print"></i> Print Vendor Monthly Statement Ledger
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 </section>
 
